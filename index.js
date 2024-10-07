@@ -36,10 +36,10 @@ app.get('/', (req, res) => {
 });
 
 app.get('/users', (req, res) => {
-    db.query('SELECT * FROM test_table LIMIT 100;', (err, results) => {
+    db.query('SELECT * FROM test_table;', (err, results) => {
         if (err) {
             console.error('쿼리 실행 중 오류 발생:', err);
-            res.status(500).send('서버 오류');
+            res.status(500).send('500 서버 오류');
             return;
         }
         res.json(results);
