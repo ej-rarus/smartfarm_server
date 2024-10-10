@@ -1,10 +1,16 @@
 // index.js
 const express = require('express');
 const mysql = require('mysql2');
+const session = require('express-session');
 const cors = require('cors');
+const bodyParser = require('body-parser');
+
 require('dotenv').config(); // dotenv 패키지 불러오기
 
 const app = express();
+app.use(bodyParser.json());
+
+
 
 // 포트 설정
 const PORT = 3000;
@@ -22,6 +28,19 @@ const db = mysql.createConnection({
 
 // CORS 오류 대응
 app.use(cors()); 
+
+app.use(cors({
+    origin: 'http://localhost:3001', // React 앱이 실행되는 주소
+    credentials: true // 쿠키 및 인증 정보 포함
+  }));
+
+// 세션 설정
+app.use(session({
+    secret: process.env.SESSION_SECRET, // 보안을 위한 비밀키
+    resave: false,
+    saveUninitialized: true,
+    cookie: { secure: false } // HTTPS가 아닌 경우 false로 설정
+  }));
 
 // MySQL 연결
 db.connect((err) => {
@@ -76,8 +95,8 @@ app.get('/diary', (req, res) => {
 
 
 // POST 요청 테스트
-app.post('/db', (req, res)=>{
-    const { test_name, test_date } = req.body;
+app.post('/db', (req, res) => {
+    const { test_name, test_date } = req.body; // JSON 데이터를 파싱
     const query = 'INSERT INTO test_table (test_name, test_date) VALUES (?, ?)';
     db.query(query, [test_name, test_date], (err, result) => {
         if (err) {
@@ -87,7 +106,28 @@ app.post('/db', (req, res)=>{
             res.status(200).send('사용자 데이터가 성공적으로 저장되었습니다.');
         }
     });
-})
+});
+
+// 세션 생성 예제
+app.get('/login', (req, res) => {
+    req.session.user = 'exampleUser';
+    res.send('User logged in');
+  });
+  
+// 세션 확인 예제
+  app.get('/check-session', (req, res) => {
+    if (req.session.user) {
+      res.send(`User is logged in as ${req.session.user}`);
+    } else {
+      res.send('No user logged in');
+    }
+  });
+  
+ // 로그아웃 예제
+  app.get('/logout', (req, res) => {
+    req.session.destroy();
+    res.send('User logged out');
+  });
 
 
 // 서버 시작
