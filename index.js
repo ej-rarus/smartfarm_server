@@ -108,26 +108,7 @@ app.post('/db', (req, res) => {
     });
 });
 
-// 세션 생성 예제
-app.get('/login', (req, res) => {
-    req.session.user = 'exampleUser';
-    res.send('User logged in');
-  });
-  
-// 세션 확인 예제
-  app.get('/check-session', (req, res) => {
-    if (req.session.user) {
-      res.send(`User is logged in as ${req.session.user}`);
-    } else {
-      res.send('No user logged in');
-    }
-  });
-  
- // 로그아웃 예제
-  app.get('/logout', (req, res) => {
-    req.session.destroy();
-    res.send('User logged out');
-  });
+
 
 
 // 서버 시작
