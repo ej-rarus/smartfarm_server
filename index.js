@@ -1,7 +1,6 @@
 // index.js
 const express = require('express');
 const mysql = require('mysql2');
-const session = require('express-session');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 
@@ -29,18 +28,8 @@ const db = mysql.createConnection({
 // CORS 오류 대응
 app.use(cors()); 
 
-app.use(cors({
-    origin: 'http://localhost:3001', // React 앱이 실행되는 주소
-    credentials: true // 쿠키 및 인증 정보 포함
-  }));
 
-// 세션 설정
-app.use(session({
-    secret: process.env.SESSION_SECRET, // 보안을 위한 비밀키
-    resave: false,
-    saveUninitialized: true,
-    cookie: { secure: false } // HTTPS가 아닌 경우 false로 설정
-  }));
+
 
 // MySQL 연결
 db.connect((err) => {
