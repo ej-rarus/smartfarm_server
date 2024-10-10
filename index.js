@@ -39,6 +39,17 @@ app.get('/', (req, res) => {
     res.send('Express 서버가 실행 중입니다!');
 });
 
+// 임시 데이터 (without DB)
+app.get('/data', (req, res) => {
+    const jsonData = {
+        id: 1,
+        name: 'John Doe',
+        email: 'johndoe@example.com'
+    };
+    res.json(jsonData);
+});
+
+//USERS 정보 테스트
 app.get('/users', (req, res) => {
     db.query('SELECT * FROM SFMARK1.test_table;', (err, results) => {
         if (err) {
@@ -50,17 +61,21 @@ app.get('/users', (req, res) => {
     });
 });
 
-// 임시 데이터
-app.get('/data', (req, res) => {
-    const jsonData = {
-        id: 1,
-        name: 'John Doe',
-        email: 'johndoe@example.com'
-    };
-    res.json(jsonData);
+//DIARY 정보 테스트
+app.get('/diary', (req, res) => {
+    db.query('SELECT * FROM SFMARK1.diary;', (err, results) => {
+        if (err) {
+            console.error('쿼리 실행 중 오류 발생:', err);
+            res.status(500).send('500 서버 오류');
+            return;
+        }
+        res.json(results);
+    });
 });
 
 
+
+// POST 요청 테스트
 app.post('/db', (req, res)=>{
     const { test_name, test_date } = req.body;
     const query = 'INSERT INTO test_table (test_name, test_date) VALUES (?, ?)';
@@ -73,6 +88,7 @@ app.post('/db', (req, res)=>{
         }
     });
 })
+
 
 // 서버 시작
 app.listen(PORT, () => {
