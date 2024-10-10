@@ -20,7 +20,8 @@ const db = mysql.createConnection({
     queueLimit: 0
 });
 
-app.use(cors()); // CORS 오류 대응
+// CORS 오류 대응
+app.use(cors()); 
 
 // MySQL 연결
 db.connect((err) => {
@@ -39,7 +40,7 @@ app.get('/', (req, res) => {
 });
 
 app.get('/users', (req, res) => {
-    db.query('SELECT * FROM test_table;', (err, results) => {
+    db.query('SELECT * FROM SFMARK1.test_table;', (err, results) => {
         if (err) {
             console.error('쿼리 실행 중 오류 발생:', err);
             res.status(500).send('500 서버 오류');
@@ -58,6 +59,20 @@ app.get('/data', (req, res) => {
     };
     res.json(jsonData);
 });
+
+
+app.post('/db', (req, res)=>{
+    const { test_name, test_date } = req.body;
+    const query = 'INSERT INTO test_table (test_name, test_date) VALUES (?, ?)';
+    db.query(query, [test_name, test_date], (err, result) => {
+        if (err) {
+            console.error('데이터 삽입 오류:', err);
+            res.status(500).send('서버 오류');
+        } else {
+            res.status(200).send('사용자 데이터가 성공적으로 저장되었습니다.');
+        }
+    });
+})
 
 // 서버 시작
 app.listen(PORT, () => {
