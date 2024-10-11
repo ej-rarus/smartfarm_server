@@ -69,7 +69,7 @@ app.get('/users', (req, res) => {
     });
 });
 
-//DIARY 정보 테스트
+// 모든 DIARY 게시글 정보 가져오기
 app.get('/diary', (req, res) => {
     db.query('SELECT * FROM SFMARK1.diary;', (err, results) => {
         if (err) {
@@ -81,7 +81,24 @@ app.get('/diary', (req, res) => {
     });
 });
 
+// 특정 DIARY 게시글 정보 가져오기
+app.get('/diary/:id', (req, res) => {
+    const diaryId = req.params.id;
+    const query = 'SELECT * FROM SFMARK1.diary WHERE post_id = ?;';
 
+    db.query(query, [diaryId], (err, results) => {
+        if (err) {
+            console.error('쿼리 실행 중 오류 발생:', err);
+            res.status(500).send('500 서버 오류');
+            return;
+        }
+        if (results.length === 0) {
+            res.status(404).send('게시글을 찾을 수 없습니다.');
+            return;
+        }
+        res.json(results[0]);
+    });
+});
 
 // POST 요청 테스트
 app.post('/db', (req, res) => {
