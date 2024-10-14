@@ -83,6 +83,24 @@ app.get('/diary/:id', (req, res) => {
     });
 });
 
+// 게시글 저장을 위한 POST 요청 처리
+app.post('/diary', (req, res) => {
+    const { post_title, post_category, author, content } = req.body; // 클라이언트에서 보낸 JSON 데이터
+  
+    if (!post_title || !post_category || !author || !content) {
+      return res.status(400).send('모든 필드를 입력해야 합니다.');
+    }
+  
+    const query = 'INSERT INTO diary (post_title, post_category, author, post_content, create_date) VALUES (?, ?, ?, ?, NOW())';
+    db.query(query, [post_title, post_category, author, content], (err, result) => {
+      if (err) {
+        console.error('데이터 삽입 오류:', err);
+        return res.status(500).send('서버 오류');
+      }
+      res.status(200).send('게시글이 성공적으로 저장되었습니다.');
+    });
+  });
+
 // POST 요청 테스트
 app.post('/db', (req, res) => {
     const { test_name, test_date } = req.body; // JSON 데이터를 파싱
