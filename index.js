@@ -1,4 +1,3 @@
-// index.js
 const express = require('express');
 const mysql = require('mysql2');
 const cors = require('cors');
@@ -9,13 +8,11 @@ require('dotenv').config(); // dotenv 패키지 불러오기
 const app = express();
 app.use(bodyParser.json());
 
-
-
 // 포트 설정
 const PORT = 3000;
 
 // MySQL 연결 설정 (환경 변수 사용)
-const db = mysql.createConnection({
+const db = mysql.createPool({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
@@ -26,21 +23,7 @@ const db = mysql.createConnection({
 });
 
 // CORS 오류 대응
-app.use(cors()); 
-
-
-
-
-// MySQL 연결
-db.connect((err) => {
-    if (err) {
-        console.error('MySQL 연결 실패:', err);
-        return;
-    }
-    console.log('MySQL에 성공적으로 연결되었습니다.');
-});
-
-// 라우터
+app.use(cors());
 
 // 기본 경로에 대한 요청 처리
 app.get('/', (req, res) => {
@@ -57,7 +40,7 @@ app.get('/data', (req, res) => {
     res.json(jsonData);
 });
 
-//USERS 정보 테스트
+// USERS 정보 테스트
 app.get('/users', (req, res) => {
     db.query('SELECT * FROM SFMARK1.test_table;', (err, results) => {
         if (err) {
@@ -114,10 +97,25 @@ app.post('/db', (req, res) => {
     });
 });
 
-
-
+// 주기적으로 연결을 유지하는 쿼리 (선택 사항)
+setInterval(() => {
+    db.query('SELECT 1', (err) => {
+        if (err) {
+            console.error('연결 유지 쿼리 중 오류 발생:', err);
+        }
+    });
+}, 10000); // 10초마다 실행
 
 // 서버 시작
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
+});
+
+// 에러 핸들링
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
