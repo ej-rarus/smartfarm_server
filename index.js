@@ -84,11 +84,6 @@ app.get('/diary/:id', (req, res) => {
     });
 });
 
-
-  
-  
-
-
 // 게시글 저장을 위한 PUT 요청 처리
 app.put('/diary/:id', (req, res) => {
     const { id } = req.params; // URL에서 게시글 ID를 가져옴
@@ -99,7 +94,7 @@ app.put('/diary/:id', (req, res) => {
     }
   
     const query = `
-      UPDATE diary 
+      UPDATE SFMARK1.diary 
       SET post_title = ?, post_category = ?, author = ?, post_content = ?, update_date = NOW()
       WHERE id = ?
     `;
