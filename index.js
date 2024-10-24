@@ -8,6 +8,7 @@ require('dotenv').config(); // dotenv 패키지 불러오기
 
 const app = express();
 app.use(bodyParser.json());
+app.use(express.json());
 
 // 포트 설정
 const PORT = 3000;
