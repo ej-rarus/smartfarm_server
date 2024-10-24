@@ -2,8 +2,7 @@ const express = require('express');
 const mysql = require('mysql2');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
+
 
 require('dotenv').config(); // dotenv 패키지 불러오기
 
@@ -85,58 +84,9 @@ app.get('/diary/:id', (req, res) => {
     });
 });
 
-//사용자 로그인 및 토큰 발급
 
-const users = [
-    {
-        id: 1,
-        username: 'testuser',
-        password: bcrypt.hashSync('password123', 8) // 비밀번호 해싱
-    }
-  ];
   
-const SECRET_KEY = 'your_secret_key'; // 실제 환경에서는 환경 변수로 설정
   
-  // 로그인 엔드포인트
-app.post('/login', (req, res) => {
-    const { username, password } = req.body;
-  
-    // 사용자 검증
-    const user = users.find(user => user.username === username);
-    if (!user) return res.status(404).send('User not found');
-  
-    // 비밀번호 검증
-    const passwordIsValid = bcrypt.compareSync(password, user.password);
-    if (!passwordIsValid) return res.status(401).send('Invalid password');
-  
-    // JWT 생성
-    const token = jwt.sign({ id: user.id }, SECRET_KEY, { expiresIn: '1h' });
-  
-    // 토큰 반환
-    res.status(200).json({ auth: true, token });
-  });
-
-function verifyJWT(req, res, next) {
-    const token = req.headers['x-access-token']; // 또는 Authorization 헤더
-  
-    if (!token) return res.status(403).send('No token provided.');
-  
-    jwt.verify(token, SECRET_KEY, (err, decoded) => {
-      if (err) return res.status(500).send('Failed to authenticate token.');
-      
-      req.userId = decoded.id;
-      next();
-    });
-  }
-  
-  // 보호된 엔드포인트
-  app.get('/dashboard', verifyJWT, (req, res) => {
-    res.status(200).send('Welcome to the dashboard!');
-  });
-  
-  app.listen(3000, () => {
-    console.log('Server running on port 3000');
-  });
 
 
 // 게시글 저장을 위한 PUT 요청 처리
