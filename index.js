@@ -88,9 +88,9 @@ app.get('/diary/:id', (req, res) => {
 // 게시글 저장을 위한 PUT 요청 처리
 app.put('/diary/:id', (req, res) => {
     const { id } = req.params;
-    const { post_title, post_category, author, content } = req.body;
+    const { post_title, post_category, author, post_content } = req.body;
 
-    if (!post_title || !post_category || !author || !content || typeof post_title !== 'string' || typeof post_category !== 'string' || typeof author !== 'string' || typeof content !== 'string') {
+    if (!post_title || !post_category || !author || !post_content) {
       return res.status(400).send('모든 필드를 올바르게 입력해야 합니다.');
     }
 
@@ -100,7 +100,7 @@ app.put('/diary/:id', (req, res) => {
       WHERE post_id = ?
     `;
 
-    db.query(query, [post_title, post_category, author, content, id], (err, result) => {
+    db.query(query, [post_title, post_category, author, post_content, id], (err, result) => {
       if (err) {
         console.error('데이터 수정 오류:', err);
         return res.status(500).send('서버 오류');
