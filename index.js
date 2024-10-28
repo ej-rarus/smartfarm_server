@@ -87,29 +87,29 @@ app.get('/diary/:id', (req, res) => {
 
 // 게시글 저장을 위한 PUT 요청 처리
 app.put('/diary/:id', (req, res) => {
-    const { id } = req.params; // URL에서 게시글 ID를 가져옴
-    const { post_title, post_category, author, content } = req.body; // 클라이언트에서 보낸 JSON 데이터
-  
-    if (!post_title || !post_category || !author || !content) {
-      return res.status(400).send('모든 필드를 입력해야 합니다.');
+    const { id } = req.params;
+    const { post_title, post_category, author, content } = req.body;
+
+    if (!post_title || !post_category || !author || !content || typeof post_title !== 'string' || typeof post_category !== 'string' || typeof author !== 'string' || typeof content !== 'string') {
+      return res.status(400).send('모든 필드를 올바르게 입력해야 합니다.');
     }
-  
+
     const query = `
       UPDATE SFMARK1.diary 
       SET post_title = ?, post_category = ?, author = ?, post_content = ?, update_date = NOW()
       WHERE id = ?
     `;
-  
+
     db.query(query, [post_title, post_category, author, content, id], (err, result) => {
       if (err) {
         console.error('데이터 수정 오류:', err);
         return res.status(500).send('서버 오류');
       }
-  
+
       if (result.affectedRows === 0) {
         return res.status(404).send('해당 ID의 게시글을 찾을 수 없습니다.');
       }
-  
+
       res.status(200).send('게시글이 성공적으로 수정되었습니다.');
     });
 });
