@@ -97,7 +97,7 @@ app.put('/diary/:id', (req, res) => {
     const query = `
       UPDATE SFMARK1.diary 
       SET post_title = ?, post_category = ?, author = ?, post_content = ?, update_date = NOW()
-      WHERE id = ?
+      WHERE post_id = ?
     `;
 
     db.query(query, [post_title, post_category, author, content, id], (err, result) => {
