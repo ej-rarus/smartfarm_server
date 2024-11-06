@@ -27,6 +27,9 @@ const db = mysql.createPool({
 // CORS 오류 대응
 app.use(cors());
 
+
+// GET 요청 
+
 // 기본 경로에 대한 요청 처리
 app.get('/', (req, res) => {
     res.send('Express 서버가 실행 중입니다!');
@@ -43,7 +46,7 @@ app.get('/data', (req, res) => {
 });
 
 // USERS 정보 테스트
-app.get('/users', (req, res) => {
+app.get('/api/users', (req, res) => {
     db.query('SELECT * FROM SFMARK1.test_table;', (err, results) => {
         if (err) {
             console.error('쿼리 실행 중 오류 발생:', err);
@@ -55,7 +58,7 @@ app.get('/users', (req, res) => {
 });
 
 // 모든 DIARY 게시글 정보 가져오기
-app.get('/diary', (req, res) => {
+app.get('/api/diary', (req, res) => {
     db.query('SELECT * FROM SFMARK1.diary;', (err, results) => {
         if (err) {
             console.error('쿼리 실행 중 오류 발생:', err);
@@ -67,7 +70,7 @@ app.get('/diary', (req, res) => {
 });
 
 // 특정 DIARY 게시글 정보 가져오기
-app.get('/diary/:id', (req, res) => {
+app.get('/api/diary/:id', (req, res) => {
     const diaryId = req.params.id;
     const query = 'SELECT * FROM SFMARK1.diary WHERE post_id = ?;';
 
@@ -85,8 +88,47 @@ app.get('/diary/:id', (req, res) => {
     });
 });
 
+
+// POST요청
+
+// POST 요청 테스트
+app.post('/api/db', (req, res) => {
+    const { test_name, test_date } = req.body; // JSON 데이터를 파싱
+    const query = 'INSERT INTO test_table (test_name, test_date) VALUES (?, ?)';
+    db.query(query, [test_name, test_date], (err, result) => {
+        if (err) {
+            console.error('데이터 삽입 오류:', err);
+            res.status(500).send('서버 오류');
+        } else {
+            res.status(200).send('사용자 데이터가 성공적으로 저장되었습니다.');
+        }
+    });
+});
+
+// 게시글 저장을 위한 POST 요청 처리
+app.post('/api/diary', (req, res) => {
+    const { post_title, post_category, author, content } = req.body; // 클라이언트에서 보낸 JSON 데이터
+  
+    if (!post_title || !post_category || !author || !content) {
+      return res.status(400).send('모든 필드를 입력해야 합니다.');
+    }
+  
+    const query = 'INSERT INTO diary (post_title, post_category, author, post_content, create_date) VALUES (?, ?, ?, ?, NOW())';
+    db.query(query, [post_title, post_category, author, content], (err, result) => {
+      if (err) {
+        console.error('데이터 삽입 오류:', err);
+        return res.status(500).send('서버 오류');
+      }
+      res.status(200).send('게시글이 성공적으로 저장되었습니다.');
+    });
+  });
+
+
+
+// PUT 요청
+  
 // 게시글 저장을 위한 PUT 요청 처리
-app.put('/diary/:id', (req, res) => {
+app.put('/api/diary/:id', (req, res) => {
     const { id } = req.params;
     const { post_title, post_category, author, post_content } = req.body;
 
@@ -114,19 +156,6 @@ app.put('/diary/:id', (req, res) => {
     });
 });
 
-// POST 요청 테스트
-app.post('/db', (req, res) => {
-    const { test_name, test_date } = req.body; // JSON 데이터를 파싱
-    const query = 'INSERT INTO test_table (test_name, test_date) VALUES (?, ?)';
-    db.query(query, [test_name, test_date], (err, result) => {
-        if (err) {
-            console.error('데이터 삽입 오류:', err);
-            res.status(500).send('서버 오류');
-        } else {
-            res.status(200).send('사용자 데이터가 성공적으로 저장되었습니다.');
-        }
-    });
-});
 
 // 주기적으로 연결을 유지하는 쿼리 (선택 사항)
 setInterval(() => {
