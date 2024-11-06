@@ -92,9 +92,11 @@ app.get('/api/diary/:id', (req, res) => {
 
 // POST요청
 
+const bcrypt = require('bcrypt');
+
 app.post('/api/signup', async (req, res) => {
     const { email_adress, password, username, marketing_agree } = req.body;
-    const created_at = new Date();
+    const created_at = new Date().toISOString().slice(0, 19).replace('T', ' '); // MySQL DATETIME 형식
 
     try {
         // 비밀번호 해싱
@@ -119,6 +121,7 @@ app.post('/api/signup', async (req, res) => {
         res.status(500).send("서버 오류가 발생했습니다.");
     }
 });
+
 
 // 게시글 저장을 위한 POST 요청 처리
 app.post('/api/diary', (req, res) => {
