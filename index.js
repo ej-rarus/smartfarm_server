@@ -95,7 +95,6 @@ app.get('/api/diary/:id', (req, res) => {
 
 app.post('/api/signup', async (req, res) => {
     const { email_adress, password, username, marketing_agree } = req.body;
-    const created_at = new Date().toISOString().slice(0, 19).replace('T', ' '); // MySQL DATETIME 형식
 
     try {
         // 비밀번호 해싱
@@ -104,11 +103,11 @@ app.post('/api/signup', async (req, res) => {
         // MySQL INSERT 쿼리
         const query = `
             INSERT INTO SFMARK1.user (email_adress, password_hash, username, marketing_agree, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, NOW())
         `;
 
         // 쿼리 실행
-        db.query(query, [email_adress, password_hash, username, marketing_agree, created_at], (err, result) => {
+        db.query(query, [email_adress, password_hash, username, marketing_agree], (err, result) => {
             if (err) {
                 console.error("회원가입 중 오류:", err);
                 return res.status(500).send("회원가입 중 오류가 발생했습니다.");
