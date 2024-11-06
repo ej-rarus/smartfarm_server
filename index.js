@@ -92,7 +92,6 @@ app.get('/api/diary/:id', (req, res) => {
 
 // POST요청
 
-const bcrypt = require('bcrypt');
 
 app.post('/api/signup', async (req, res) => {
     const { email_adress, password, username, marketing_agree } = req.body;
