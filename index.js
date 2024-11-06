@@ -2,6 +2,7 @@ const express = require('express');
 const mysql = require('mysql2');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const bcrypt = require('bcrypt');
 
 
 require('dotenv').config(); // dotenv 패키지 불러오기
@@ -91,18 +92,32 @@ app.get('/api/diary/:id', (req, res) => {
 
 // POST요청
 
-// POST 요청 테스트
-app.post('/api/db', (req, res) => {
-    const { test_name, test_date } = req.body; // JSON 데이터를 파싱
-    const query = 'INSERT INTO test_table (test_name, test_date) VALUES (?, ?)';
-    db.query(query, [test_name, test_date], (err, result) => {
-        if (err) {
-            console.error('데이터 삽입 오류:', err);
-            res.status(500).send('서버 오류');
-        } else {
-            res.status(200).send('사용자 데이터가 성공적으로 저장되었습니다.');
-        }
-    });
+app.post('/api/signup', async (req, res) => {
+    const { email_adress, password, username, marketing_agree } = req.body;
+    const created_at = new Date();
+
+    try {
+        // 비밀번호 해싱
+        const password_hash = await bcrypt.hash(password, 10);
+
+        // MySQL INSERT 쿼리
+        const query = `
+            INSERT INTO SFMARK1.user (email_adress, password_hash, username, marketing_agree, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        `;
+
+        // 쿼리 실행
+        db.query(query, [email_adress, password_hash, username, marketing_agree, created_at], (err, result) => {
+            if (err) {
+                console.error("회원가입 중 오류:", err);
+                return res.status(500).send("회원가입 중 오류가 발생했습니다.");
+            }
+            res.status(200).send("회원가입이 성공적으로 완료되었습니다.");
+        });
+    } catch (error) {
+        console.error("서버 오류:", error);
+        res.status(500).send("서버 오류가 발생했습니다.");
+    }
 });
 
 // 게시글 저장을 위한 POST 요청 처리
