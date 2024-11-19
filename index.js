@@ -18,7 +18,10 @@ app.use(cors({
 }));
 
 // Helmet 미들웨어 추가
-app.use(helmet());
+app.use(helmet({
+    contentSecurityPolicy: false,  // CSP를 비활성화하거나
+    crossOriginEmbedderPolicy: false
+}));
 
 // 요청 로깅 미들웨어
 app.use((req, res, next) => {
