@@ -6,6 +6,7 @@ const bcrypt = require('bcrypt');
 require('dotenv').config();
 const helmet = require('helmet');
 const logger = require('./logger');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 app.use(bodyParser.json());
@@ -44,7 +45,13 @@ const TABLES = {
 };
 
 // 서버 시작 전에 필수 환경 변수 확인
-const requiredEnvVars = ['DB_HOST', 'DB_USER', 'DB_PASSWORD', 'DB_DATABASE'];
+const requiredEnvVars = [
+    'DB_HOST', 
+    'DB_USER', 
+    'DB_PASSWORD', 
+    'DB_DATABASE',
+    'JWT_SECRET'
+];
 const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
 
 if (missingEnvVars.length > 0) {
@@ -57,16 +64,6 @@ if (missingEnvVars.length > 0) {
 // 기본 경로에 대한 요청 처리
 app.get('/', (req, res) => {
     res.send('Express 서버가 실행 중입니다!');
-});
-
-// 임시 데이터 (without DB)
-app.get('/data', (req, res) => {
-    const jsonData = {
-        id: 1,
-        name: 'John Doe',
-        email: 'johndoe@example.com'
-    };
-    res.json(jsonData);
 });
 
 // USERS 정보 테스트
@@ -86,7 +83,7 @@ app.get('/api/users', (req, res) => {
 app.get('/api/diary', (req, res) => {
     db.query(`SELECT * FROM ${TABLES.DIARY}`, (err, results) => {
         if (err) {
-            console.error('쿼리 실행 중 오류 발생:', err);
+            logger.error('쿼리 실행 중 오류 발생:', err);
             res.status(500).send('500 서버 오류');
             return;
         }
@@ -161,65 +158,134 @@ app.post('/api/signup', async (req, res) => {
 
 // 로그인 POST 요청 처리
 app.post('/api/login', async (req, res) => {
-    const { email, password } = req.body;
+    try {
+        const { email_adress, password } = req.body;
 
-    // 사용자 조회 쿼리
-    const query = 'SELECT * FROM SFMARK1.user WHERE email_address = ?';
-    
-    db.query(query, [email], async (err, results) => {
-        if (err) {
-            console.error("데이터베이스 오류:", err);
-            return res.status(500).send("서버 오류가 발생했습니다.");
+        // 입력값 검증
+        if (!email_adress || !password) {
+            return sendResponse(res, 400, "이메일과 비밀번호를 모두 입력해주세요.");
         }
-        
+
+        // 사용자 조회
+        const query = `SELECT * FROM ${TABLES.USER} WHERE email_adress = ?`;
+        const results = await executeQuery(query, [email_adress]);
+
         if (results.length === 0) {
-            return res.status(400).send("사용자를 찾을 수 없습니다.");
+            logger.info(`로그인 실패: 존재하지 않는 이메일 - ${email_adress}`);
+            return sendResponse(res, 401, "이메일 또는 비밀번호가 올바르지 않습니다.");
         }
-        
+
         const user = results[0];
 
-        // 비밀번호 비교
-        const isMatch = await bcrypt.compare(password, user.password_hash);
-        if (!isMatch) {
-            return res.status(400).send("비밀번호가 일치하지 않습니다.");
+        // 비밀번호 검증
+        const isValidPassword = await bcrypt.compare(password, user.password_hash);
+        if (!isValidPassword) {
+            logger.info(`로그인 실패: 잘못된 비밀번호 - ${email_adress}`);
+            return sendResponse(res, 401, "이메일 또는 비밀번호가 올바르지 않습니다.");
         }
 
         // JWT 토큰 생성
         const token = jwt.sign(
-            { userId: user.user_id, username: user.username },
+            {
+                userId: user.user_id,
+                email: user.email_adress,
+                username: user.username
+            },
             process.env.JWT_SECRET,
-            { expiresIn: "1h" } // 토큰 만료 시간
+            { expiresIn: '24h' }
         );
 
-        res.status(200).json({ token });
-    });
+        // 마지막 로그인 시간 업데이트
+        await executeQuery(
+            `UPDATE ${TABLES.USER} SET last_login = NOW() WHERE user_id = ?`,
+            [user.user_id]
+        );
+
+        logger.info(`로그인 성공: ${email_adress}`);
+        
+        // 응답
+        return sendResponse(res, 200, "로그인 성공", {
+            token,
+            user: {
+                userId: user.user_id,
+                email: user.email_adress,
+                username: user.username
+            }
+        });
+
+    } catch (error) {
+        logger.error('로그인 처리 중 오류 발생:', { 
+            error: error.message, 
+            stack: error.stack 
+        });
+        return sendResponse(res, 500, "로그인 처리 중 오류가 발생했습니다.");
+    }
 });
 
+// JWT 검증 미들웨어 (보호된 라우트에서 사용)
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
 
+    if (!token) {
+        return sendResponse(res, 401, "인증 토큰이 필요합니다.");
+    }
+
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+        if (err) {
+            logger.error('토큰 검증 실패:', { error: err.message });
+            return sendResponse(res, 403, "유효하지 않은 토큰입니다.");
+        }
+
+        req.user = user;
+        next();
+    });
+};
+
+// 보호된 라우트 예시
+app.get('/api/profile', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const query = `SELECT user_id, email_adress, username, created_at 
+                      FROM ${TABLES.USER} 
+                      WHERE user_id = ?`;
+        const results = await executeQuery(query, [userId]);
+        
+        if (results.length === 0) {
+            return sendResponse(res, 404, "사용자를 찾을 수 없습니다.");
+        }
+
+        return sendResponse(res, 200, "프로필 조회 성공", results[0]);
+    } catch (error) {
+        logger.error('프로필 조회 중 오류 발생:', { 
+            error: error.message, 
+            stack: error.stack 
+        });
+        return sendResponse(res, 500, "프로필 조회 중 오류가 발생했습니다.");
+    }
+});
 
 // 게시글 저장을 위한 POST 요청 처리
-app.post('/api/diary', (req, res) => {
+app.post('/api/diary', authenticateToken, async (req, res) => {
     const { post_title, post_category, author, content } = req.body;
+    
+    if (!post_title || !post_category || !author || !content) {
+        return sendResponse(res, 400, "모든 필수 필드를 입력해주세요.");
+    }
 
     const query = `INSERT INTO ${TABLES.DIARY} 
         (post_title, post_category, author, post_content, create_date) 
         VALUES (?, ?, ?, ?, NOW())`;
-
-    db.query(query, [post_title, post_category, author, content], (err, result) => {
-      if (err) {
-        console.error('데이터 삽입 오류:', err);
-        return res.status(500).send('서버 오류');
-      }
-      res.status(200).send('게시글이 성공적으로 저장되었습니다.');
-    });
-  });
+    await executeQuery(query, [post_title, post_category, author, content]);
+    return sendResponse(res, 200, "게시글이 성공적으로 저장되었습니다.");
+});
 
 
 
 // PUT 요청
 
 // 게시글 저장을 위한 PUT 요청 처리
-app.put('/api/diary/:id', (req, res) => {
+app.put('/api/diary/:id', authenticateToken, (req, res) => {
     const { id } = req.params;
     const { post_title, post_category, author, post_content } = req.body;
 
