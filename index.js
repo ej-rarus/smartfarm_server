@@ -4,11 +4,26 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const bcrypt = require('bcrypt');
 require('dotenv').config();
+const helmet = require('helmet');
+const logger = require('./logger');
 
 const app = express();
 app.use(bodyParser.json());
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+    origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    credentials: true
+}));
+
+// Helmet 미들웨어 추가
+app.use(helmet());
+
+// 요청 로깅 미들웨어
+app.use((req, res, next) => {
+    logger.info(`${req.method} ${req.url} - IP: ${req.ip}`);
+    next();
+});
 
 const PORT = process.env.PORT || 3000;
 
@@ -21,6 +36,21 @@ const db = mysql.createPool({
     connectionLimit: 10,
     queueLimit: 0
 });
+
+// 테이블명을 상수로 정의
+const TABLES = {
+    USER: 'SFMARK1.user',
+    DIARY: 'SFMARK1.diary'
+};
+
+// 서버 시작 전에 필수 환경 변수 확인
+const requiredEnvVars = ['DB_HOST', 'DB_USER', 'DB_PASSWORD', 'DB_DATABASE'];
+const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
+
+if (missingEnvVars.length > 0) {
+    console.error(`Missing required environment variables: ${missingEnvVars.join(', ')}`);
+    process.exit(1);
+}
 
 // GET 요청 
 
@@ -43,17 +73,18 @@ app.get('/data', (req, res) => {
 app.get('/api/users', (req, res) => {
     db.query('SELECT * FROM SFMARK1.test_table;', (err, results) => {
         if (err) {
-            console.error('쿼리 실행 중 오류 발생:', err);
+            logger.error('쿼리 실행 중 오류 발생:', { error: err.message, stack: err.stack });
             res.status(500).send('500 서버 오류');
             return;
         }
+        logger.info('사용자 목록 조회 성공');
         res.json(results);
     });
 });
 
 // 모든 DIARY 게시글 정보 가져오기
 app.get('/api/diary', (req, res) => {
-    db.query('SELECT * FROM SFMARK1.diary;', (err, results) => {
+    db.query(`SELECT * FROM ${TABLES.DIARY}`, (err, results) => {
         if (err) {
             console.error('쿼리 실행 중 오류 발생:', err);
             res.status(500).send('500 서버 오류');
@@ -64,22 +95,20 @@ app.get('/api/diary', (req, res) => {
 });
 
 // 특정 DIARY 게시글 정보 가져오기
-app.get('/api/diary/:id', (req, res) => {
-    const diaryId = req.params.id;
-    const query = 'SELECT * FROM SFMARK1.diary WHERE post_id = ?;';
-
-    db.query(query, [diaryId], (err, results) => {
-        if (err) {
-            console.error('쿼리 실행 중 오류 발생:', err);
-            res.status(500).send('500 서버 오류');
-            return;
-        }
+app.get('/api/diary/:id', async (req, res) => {
+    try {
+        const diaryId = req.params.id;
+        const query = `SELECT * FROM ${TABLES.DIARY} WHERE post_id = ?`;
+        const results = await executeQuery(query, [diaryId]);
+        
         if (results.length === 0) {
-            res.status(404).send('게시글을 찾을 수 없습니다.');
-            return;
+            return res.status(404).send('게시글을 찾을 수 없습니다.');
         }
         res.json(results[0]);
-    });
+    } catch (err) {
+        console.error('쿼리 실행 중 오류 발생:', err);
+        res.status(500).send('500 서버 오류');
+    }
 });
 
 
@@ -88,6 +117,18 @@ app.get('/api/diary/:id', (req, res) => {
 // 회원가입 요청 처리
 app.post('/api/signup', async (req, res) => {
     const { email_adress, password, username, marketing_agree } = req.body;
+    
+    // 이메일 형식 검증
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email_adress)) {
+        return res.status(400).json({ message: '올바른 이메일 형식이 아닙니다.' });
+    }
+    
+    // 비밀번호 길이 검증
+    if (password.length < 8) {
+        return res.status(400).json({ message: '비밀번호는 최소 8자 이상이어야 합니다.' });
+    }
+    
     const created_at = new Date().toISOString().slice(0, 19).replace('T', ' ');
   
     try {
@@ -122,13 +163,12 @@ app.post('/api/signup', async (req, res) => {
 
 // 게시글 저장을 위한 POST 요청 처리
 app.post('/api/diary', (req, res) => {
-    const { post_title, post_category, author, content } = req.body; // 클라이언트에서 보낸 JSON 데이터
+    const { post_title, post_category, author, content } = req.body;
 
-    if (!post_title || !post_category || !author || !content) {
-      return res.status(400).send('모든 필드를 입력해야 합니다.');
-    }
+    const query = `INSERT INTO ${TABLES.DIARY} 
+        (post_title, post_category, author, post_content, create_date) 
+        VALUES (?, ?, ?, ?, NOW())`;
 
-    const query = 'INSERT INTO diary (post_title, post_category, author, post_content, create_date) VALUES (?, ?, ?, ?, NOW())';
     db.query(query, [post_title, post_category, author, content], (err, result) => {
       if (err) {
         console.error('데이터 삽입 오류:', err);
@@ -183,15 +223,64 @@ setInterval(() => {
 
 // 서버 시작
 app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+    logger.info(`Server is running on http://localhost:${PORT}`);
 });
 
 // 에러 핸들링
 process.on('uncaughtException', (err) => {
-    console.error('Uncaught Exception:', err);
+    logger.error('Uncaught Exception:', { error: err.message, stack: err.stack });
+    process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    logger.error('Unhandled Rejection:', { 
+        reason: reason instanceof Error ? reason.message : reason,
+        stack: reason instanceof Error ? reason.stack : undefined
+    });
+});
+
+// 공통 에러 핸들러 추가
+app.use((err, req, res, next) => {
+    logger.error('에러 발생:', { 
+        error: err.message, 
+        stack: err.stack,
+        path: req.path,
+        method: req.method
+    });
+    
+    res.status(500).json({
+        message: '서버 오류가 발생했습니다.',
+        error: process.env.NODE_ENV === 'development' ? err.message : {}
+    });
+});
+
+// db.query를 Promise로 래핑하여 사용하는 것을 추천
+const executeQuery = (sql, params) => {
+    return new Promise((resolve, reject) => {
+        db.query(sql, params, (err, results) => {
+            if (err) reject(err);
+            resolve(results);
+        });
+    });
+};
+
+// 응답 형식을 일관되게 유지
+const sendResponse = (res, status, message, data = null) => {
+    const response = {
+        status,
+        message,
+        data
+    };
+    return res.status(status).json(response);
+};
+
+// 사용 예시
+app.post('/api/signup', async (req, res) => {
+    try {
+        // ... 처리 로직
+        return sendResponse(res, 200, "회원가입이 성공적으로 완료되었습니다.");
+    } catch (error) {
+        return sendResponse(res, 500, "서버 오류가 발생했습니다.");
+    }
 });
 
