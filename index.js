@@ -12,7 +12,7 @@ const app = express();
 app.use(bodyParser.json());
 app.use(express.json());
 app.use(cors({
-    origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
+    origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true
 }));
@@ -260,7 +260,7 @@ app.get('/api/profile', authenticateToken, async (req, res) => {
 
         return sendResponse(res, 200, "프로필 조회 성공", results[0]);
     } catch (error) {
-        logger.error('프로필 조회 중 오류 발생:', { 
+        logger.error('프로필 조��� 중 오류 발생:', { 
             error: error.message, 
             stack: error.stack 
         });
