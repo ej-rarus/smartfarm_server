@@ -37,6 +37,7 @@ const db = mysql.createPool({
     queueLimit: 0
 });
 
+<<<<<<< HEAD
 // 테이블명을 상수로 정의
 const TABLES = {
     USER: 'SFMARK1.user',
@@ -53,6 +54,9 @@ if (missingEnvVars.length > 0) {
 }
 
 // GET 요청 
+=======
+// GET 요청
+>>>>>>> e752af3a39fce0bd7b4cf15bdf431a5481da7a5c
 
 // 기본 경로에 대한 요청 처리
 app.get('/', (req, res) => {
@@ -157,6 +161,42 @@ app.post('/api/signup', async (req, res) => {
         console.error("서버 오류:", error);
         res.status(500).send("서버 오류가 발생했습니다.");
     }
+});
+
+// 로그인 POST 요청 처리
+app.post('/api/login', async (req, res) => {
+    const { email, password } = req.body;
+
+    // 사용자 조회 쿼리
+    const query = 'SELECT * FROM SFMARK1.user WHERE email_address = ?';
+    
+    db.query(query, [email], async (err, results) => {
+        if (err) {
+            console.error("데이터베이스 오류:", err);
+            return res.status(500).send("서버 오류가 발생했습니다.");
+        }
+        
+        if (results.length === 0) {
+            return res.status(400).send("사용자를 찾을 수 없습니다.");
+        }
+        
+        const user = results[0];
+
+        // 비밀번호 비교
+        const isMatch = await bcrypt.compare(password, user.password_hash);
+        if (!isMatch) {
+            return res.status(400).send("비밀번호가 일치하지 않습니다.");
+        }
+
+        // JWT 토큰 생성
+        const token = jwt.sign(
+            { userId: user.user_id, username: user.username },
+            process.env.JWT_SECRET,
+            { expiresIn: "1h" } // 토큰 만료 시간
+        );
+
+        res.status(200).json({ token });
+    });
 });
 
 
