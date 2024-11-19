@@ -37,7 +37,6 @@ const db = mysql.createPool({
     queueLimit: 0
 });
 
-<<<<<<< HEAD
 // 테이블명을 상수로 정의
 const TABLES = {
     USER: 'SFMARK1.user',
@@ -54,9 +53,6 @@ if (missingEnvVars.length > 0) {
 }
 
 // GET 요청 
-=======
-// GET 요청
->>>>>>> e752af3a39fce0bd7b4cf15bdf431a5481da7a5c
 
 // 기본 경로에 대한 요청 처리
 app.get('/', (req, res) => {
