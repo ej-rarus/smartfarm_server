@@ -8,6 +8,8 @@ const helmet = require('helmet');
 const logger = require('./logger');
 const jwt = require('jsonwebtoken');
 const axios = require('axios'); // axios 추가 필요
+const http = require('http');
+const { Server } = require('socket.io');
 
 
 const app = express();
@@ -308,7 +310,7 @@ app.get('/api/profile', authenticateToken, async (req, res) => {
 
         return sendResponse(res, 200, "프로필 조회 성공", results[0]);
     } catch (error) {
-        logger.error('프로필 조��� 중 오류 발생:', { 
+        logger.error('프로필 조회 중 오류 발생:', { 
             error: error.message, 
             stack: error.stack 
         });
@@ -374,8 +376,44 @@ setInterval(() => {
     });
 }, 10000); // 10초마다 실행
 
-// 서버 시작
-app.listen(PORT, () => {
+// Express 서버와 Socket.io 서버 설정
+const server = http.createServer(app);
+const io = new Server(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
+
+// WebSocket 연결 처리
+io.on('connection', (socket) => {
+    logger.info('새로운 클라이언트 연결됨');
+
+    // 센서 데이터 수신
+    socket.on('sensorData', (data) => {
+        logger.info('센서 데이터 수신:', data);
+        // 모든 클라이언트에게 데이터 브로드캐스트
+        io.emit('sensorUpdate', data);
+    });
+
+    // 제어 명령 수신
+    socket.on('control', (command) => {
+        logger.info('제어 명령 수신:', command);
+        // 명령 처리 후 결과 전송
+        io.emit('controlResult', {
+            success: true,
+            command: command
+        });
+    });
+
+    // 연결 해제 처리
+    socket.on('disconnect', () => {
+        logger.info('클라이언트 연결 해제됨');
+    });
+});
+
+// 기존 app.listen() 대신 이것을 사용
+server.listen(PORT, () => {
     logger.info(`Server is running on http://localhost:${PORT}`);
 });
 
