@@ -381,26 +381,27 @@ const wss = new WebSocketServer({ server });
 // WebSocket 연결 관리
 let clients = [];
 wss.on("connection", (ws) => {
-  console.log("Client connected");
-  clients.push(ws);
+    console.log("Client connected");
+    clients.push(ws);
 
-  // 클라이언트가 메시지를 보낼 때 처리
-  ws.on("message", (message) => {
-    console.log("Received:", message);
+    // 클라이언트가 메시지를 보낼 때 처리
+    ws.on("message", (message) => {
+        const messageStr = message.toString();  // Buffer를 문자열로 변환
+        console.log("Received:", messageStr);
 
-    // 모든 클라이언트에 메시 브로드캐스트
-    clients.forEach((client) => {
-      if (client.readyState === client.OPEN) {
-        client.send(message);
-      }
+        // 모든 클라이언트에게 받은 메시지를 브로드캐스트
+        clients.forEach((client) => {
+            if (client.readyState === client.OPEN) {
+                client.send("Hi");  // 실제 받은 메시지를 전송
+            }
+        });
     });
-  });
 
-  // 연결이 끊어졌을 때
-  ws.on("close", () => {
-    console.log("Client disconnected");
-    clients = clients.filter((client) => client !== ws);
-  });
+    // 연결이 끊어졌을 때
+    ws.on("close", () => {
+        console.log("Client disconnected");
+        clients = clients.filter((client) => client !== ws);
+    });
 });
 
 // WebSocket 에러 처리 추가
