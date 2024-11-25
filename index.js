@@ -7,6 +7,8 @@ require('dotenv').config();
 const helmet = require('helmet');
 const logger = require('./logger');
 const jwt = require('jsonwebtoken');
+const axios = require('axios'); // axios 추가 필요
+
 
 const app = express();
 app.use(bodyParser.json());
@@ -53,7 +55,9 @@ const requiredEnvVars = [
     'DB_USER', 
     'DB_PASSWORD', 
     'DB_DATABASE',
-    'JWT_SECRET'
+    'JWT_SECRET',
+    'KAMIS_CERT_KEY',  
+    'KAMIS_API_ID'     
 ];
 const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
 
@@ -67,6 +71,50 @@ if (missingEnvVars.length > 0) {
 // 기본 경로에 대한 요청 처리
 app.get('/', (req, res) => {
     res.send('Express 서버가 실행 중입니다!');
+});
+
+// KAMIS API 프록시 라우트 추가
+app.get('/api/kamis/price', async (req, res) => {
+    try {
+        const today = new Date();
+        const endDate = today.toISOString().split('T')[0];
+        const startDate = new Date(today.setMonth(today.getMonth() - 1))
+                          .toISOString().split('T')[0];
+
+        const response = await axios.get('http://www.kamis.or.kr/service/price/xml.do', {
+            params: {
+                action: 'periodProductList',
+                p_productclscode: '02',
+                p_startday: startDate,
+                p_endday: endDate,
+                p_itemcategorycode: '200',
+                p_itemcode: '225',
+                p_kindcode: '00',
+                p_productrankcode: '04',
+                p_countrycode: '1101',
+                p_convert_kg_yn: 'Y',
+                p_cert_key: process.env.KAMIS_CERT_KEY,
+                p_cert_id: process.env.KAMIS_API_ID,
+                p_returntype: 'json'
+            }
+        });
+
+        // 응답 데이터 검증 및 전달
+        if (response.data.data?.error_code === '000') {
+            logger.info('KAMIS API 데이터 조회 성공');
+            return sendResponse(res, 200, "데이터 조회 성공", response.data);
+        } else {
+            logger.warn('KAMIS API 데이터 없음');
+            return sendResponse(res, 404, "데이터가 없습니다.");
+        }
+
+    } catch (error) {
+        logger.error('KAMIS API 호출 중 오류:', { 
+            error: error.message, 
+            stack: error.stack 
+        });
+        return sendResponse(res, 500, "가격 정보 조회 중 오류가 발생했습니다.");
+    }
 });
 
 // USERS 정보 테스트
