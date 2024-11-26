@@ -392,7 +392,7 @@ wss.on("connection", (ws) => {
         // 모든 클라이언트에게 받은 메시지를 브로드캐스트
         clients.forEach((client) => {
             if (client.readyState === client.OPEN) {
-                client.send("Hi");  // 실제 받은 메시지를 전송
+                client.send(messageStr);  // 실제 받은 메시지를 전송
             }
         });
     });
