@@ -386,22 +386,85 @@ wss.on("connection", (ws) => {
     console.log("Client connected");
     clients.push(ws);
 
-    // 클라이언트가 메시지를 보낼 때 처리
-    ws.on("message", (message) => {
-        const messageStr = message.toString();  // Buffer를 문자열로 변환
-        console.log("Received:", messageStr);
+    // RTSP 스트리밍 시작
+    const rtspUrl = 'rtsp://farmster:ds0123456@192.168.0.7:554/stream1';
+    let ffmpeg = null;
 
-        // 모든 클라이언트에게 받은 메시지를 브로드캐스트
-        clients.forEach((client) => {
-            if (client.readyState === client.OPEN) {
-                client.send(messageStr);  // 실제 받은 메시지를 전송
+    // 스트리밍 시작 함수
+    const startStreaming = () => {
+        ffmpeg = spawn('ffmpeg', [
+            '-rtsp_transport', 'tcp',
+            '-i', rtspUrl,
+            '-f', 'mjpeg',
+            '-vf', 'scale=320:240',
+            '-qscale:v', '20',
+            '-r', '5',
+            '-preset', 'medium',
+            '-bufsize', '2M',
+            '-maxrate', '1M',
+            '-an',
+            '-'
+        ]);
+
+        console.log('WebSocket 스트리밍 시작:', rtspUrl);
+
+        ffmpeg.stdout.on('data', (chunk) => {
+            if (ws.readyState === ws.OPEN) {
+                try {
+                    // Base64로 인코딩하여 전송
+                    ws.send(JSON.stringify({
+                        type: 'stream',
+                        data: chunk.toString('base64')
+                    }));
+                } catch (error) {
+                    console.error('스트리밍 전송 에러:', error);
+                }
             }
         });
+
+        ffmpeg.stderr.on('data', (data) => {
+            const logMessage = data.toString();
+            if (!logMessage.includes('frame=') && !logMessage.includes('fps=')) {
+                console.log('FFmpeg 로그:', logMessage);
+            }
+        });
+
+        ffmpeg.on('error', (error) => {
+            console.error('FFmpeg 에러:', error);
+            ws.close();
+        });
+    };
+
+    // 클라이언트 메시지 처리
+    ws.on("message", (message) => {
+        const messageStr = message.toString();
+        console.log("Received:", messageStr);
+
+        try {
+            const data = JSON.parse(messageStr);
+            
+            // 스트리밍 시작 요청 처리
+            if (data.type === 'startStream') {
+                startStreaming();
+            }
+            
+            // 기존 메시지 브로드캐스트 유지
+            clients.forEach((client) => {
+                if (client.readyState === client.OPEN) {
+                    client.send(messageStr);
+                }
+            });
+        } catch (error) {
+            console.error('메시지 처리 에러:', error);
+        }
     });
 
-    // 연결이 끊어졌을 때
+    // 연결 종료 처리
     ws.on("close", () => {
         console.log("Client disconnected");
+        if (ffmpeg) {
+            ffmpeg.kill('SIGTERM');
+        }
         clients = clients.filter((client) => client !== ws);
     });
 });
@@ -478,65 +541,65 @@ app.post('/api/signup', async (req, res) => {
     }
 });
 
-// RTSP 스트리밍 엔드포인트 추가
-app.get('/stream', (req, res) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.writeHead(200, {
-        'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
-        'Connection': 'keep-alive',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
-    });
+// // RTSP 스트리밍 엔드포인트 추가
+// app.get('/stream', (req, res) => {
+//     res.setHeader('Access-Control-Allow-Origin', '*');
+//     res.writeHead(200, {
+//         'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
+//         'Connection': 'keep-alive',
+//         'Cache-Control': 'no-cache',
+//         'Pragma': 'no-cache'
+//     });
 
-    const rtspUrl = 'rtsp://farmster:ds0123456@192.168.0.7:554/stream1';
+//     const rtspUrl = 'rtsp://farmster:ds0123456@192.168.0.7:554/stream1';
     
-    const ffmpeg = spawn('ffmpeg', [
-        '-rtsp_transport', 'tcp',
-        '-i', rtspUrl,
-        '-f', 'mjpeg',
-        '-vf', 'scale=320:240',    // 낮은 해상도 유지
-        '-qscale:v', '20',         // 낮은 화질 유지
-        '-r', '5',                 // 프레임레이트를 더 낮춤 (5fps)
-        '-preset', 'medium',       // 인코딩 프리셋을 'medium'으로 변경
-        '-bufsize', '2M',          // 버퍼 크기 설정
-        '-maxrate', '1M',          // 최대 비트레이트 제한
-        '-an',                     // 오디오 제외
-        '-'
-    ]);
+//     const ffmpeg = spawn('ffmpeg', [
+//         '-rtsp_transport', 'tcp',
+//         '-i', rtspUrl,
+//         '-f', 'mjpeg',
+//         '-vf', 'scale=320:240',    // 낮은 해상도 유지
+//         '-qscale:v', '20',         // 낮은 화질 유지
+//         '-r', '5',                 // 프레임레이트를 더 낮춤 (5fps)
+//         '-preset', 'medium',       // 인코딩 프리셋을 'medium'으로 변경
+//         '-bufsize', '2M',          // 버퍼 크기 설정
+//         '-maxrate', '1M',          // 최대 비트레이트 제한
+//         '-an',                     // 오디오 제외
+//         '-'
+//     ]);
 
-    console.log('스트리밍 시작:', rtspUrl);
+//     console.log('스트리밍 시작:', rtspUrl);
 
-    ffmpeg.stdout.on('data', (chunk) => {
-        try {
-            if (!res.writableEnded) {
-                res.write('--frame\r\n');
-                res.write('Content-Type: image/jpeg\r\n');
-                res.write('Content-Length: ' + chunk.length + '\r\n\r\n');
-                res.write(chunk);
-                res.write('\r\n');
-            }
-        } catch (error) {
-            console.error('스트리밍 에러:', error);
-            ffmpeg.kill('SIGTERM');
-        }
-    });
+//     ffmpeg.stdout.on('data', (chunk) => {
+//         try {
+//             if (!res.writableEnded) {
+//                 res.write('--frame\r\n');
+//                 res.write('Content-Type: image/jpeg\r\n');
+//                 res.write('Content-Length: ' + chunk.length + '\r\n\r\n');
+//                 res.write(chunk);
+//                 res.write('\r\n');
+//             }
+//         } catch (error) {
+//             console.error('스트리밍 에러:', error);
+//             ffmpeg.kill('SIGTERM');
+//         }
+//     });
 
-    ffmpeg.stderr.on('data', (data) => {
-        const logMessage = data.toString();
-        // 프레임 정보는 제외하고 중요한 로그만 출력
-        if (!logMessage.includes('frame=') && !logMessage.includes('fps=')) {
-            console.log('FFmpeg 로그:', logMessage);
-        }
-    });
+//     ffmpeg.stderr.on('data', (data) => {
+//         const logMessage = data.toString();
+//         // 프레임 정보는 제외하고 중요한 로그만 출력
+//         if (!logMessage.includes('frame=') && !logMessage.includes('fps=')) {
+//             console.log('FFmpeg 로그:', logMessage);
+//         }
+//     });
 
-    ffmpeg.on('error', (err) => {
-        console.error('FFmpeg 에러:', err);
-        if (!res.writableEnded) res.end();
-    });
+//     ffmpeg.on('error', (err) => {
+//         console.error('FFmpeg 에러:', err);
+//         if (!res.writableEnded) res.end();
+//     });
 
-    req.on('close', () => {
-        console.log('클라이언트 연결 종료');
-        ffmpeg.kill('SIGTERM');
-    });
-});
+//     req.on('close', () => {
+//         console.log('클라이언트 연결 종료');
+//         ffmpeg.kill('SIGTERM');
+//     });
+// });
 
