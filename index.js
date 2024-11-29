@@ -9,6 +9,7 @@ const jwt = require('jsonwebtoken');
 const axios = require('axios'); 
 const http = require('http');
 const { WebSocketServer } = require("ws");
+const { spawn } = require('child_process');
 
 
 const app = express();
@@ -57,7 +58,8 @@ const requiredEnvVars = [
     'DB_DATABASE',
     'JWT_SECRET',
     'KAMIS_CERT_KEY',  
-    'KAMIS_API_ID'     
+    'KAMIS_API_ID',
+    'RTSP_URL'
 ];
 const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
 
@@ -231,11 +233,11 @@ app.post('/api/login', async (req, res) => {
         // 비밀번호 검증
         const isValidPassword = await bcrypt.compare(password, user.password_hash);
         if (!isValidPassword) {
-            logger.info(`로그인 실패: 잘못된 비밀번호 - ${email_adress}`);
+            logger.info(`그인 실패: 잘못된 비밀번호 - ${email_adress}`);
             return sendResponse(res, 401, "이메일 또는 비밀번호가 올바르지 않습니다.");
         }
 
-        // JWT 토큰 생성
+        // JWT  생성
         const token = jwt.sign(
             {
                 userId: user.user_id,
@@ -474,5 +476,66 @@ app.post('/api/signup', async (req, res) => {
     } catch (error) {
         return sendResponse(res, 500, "서버 오류가 발생했습니다.");
     }
+});
+
+// RTSP 스트리밍 엔드포인트 추가
+app.get('/stream', (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.writeHead(200, {
+        'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
+        'Connection': 'keep-alive',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+    });
+
+    const rtspUrl = 'rtsp://farmster:ds0123456@192.168.0.7:554/stream1';
+    
+    const ffmpeg = spawn('ffmpeg', [
+        '-rtsp_transport', 'tcp',
+        '-i', rtspUrl,
+        '-f', 'mjpeg',
+        '-vf', 'scale=320:240',  // 해상도를 320x240으로 낮춤
+        '-qscale:v', '20',       // 화질을 더 낮춤 (높은 값 = 낮은 화질)
+        '-r', '10',              // 프레임레이트도 낮춤
+        '-tune', 'zerolatency',
+        '-preset', 'ultrafast',
+        '-an',
+        '-'
+    ]);
+
+    console.log('스트리밍 시작:', rtspUrl);
+
+    ffmpeg.stdout.on('data', (chunk) => {
+        try {
+            if (!res.writableEnded) {
+                res.write('--frame\r\n');
+                res.write('Content-Type: image/jpeg\r\n');
+                res.write('Content-Length: ' + chunk.length + '\r\n\r\n');
+                res.write(chunk);
+                res.write('\r\n');
+            }
+        } catch (error) {
+            console.error('스트리밍 에러:', error);
+            ffmpeg.kill('SIGTERM');
+        }
+    });
+
+    ffmpeg.stderr.on('data', (data) => {
+        const logMessage = data.toString();
+        // 프레임 정보는 제외하고 중요한 로그만 출력
+        if (!logMessage.includes('frame=') && !logMessage.includes('fps=')) {
+            console.log('FFmpeg 로그:', logMessage);
+        }
+    });
+
+    ffmpeg.on('error', (err) => {
+        console.error('FFmpeg 에러:', err);
+        if (!res.writableEnded) res.end();
+    });
+
+    req.on('close', () => {
+        console.log('클라이언트 연결 종료');
+        ffmpeg.kill('SIGTERM');
+    });
 });
 
