@@ -82,6 +82,8 @@ app.get('/api/kamis/price', async (req, res) => {
         const startDate = new Date(today.setMonth(today.getMonth() - 1))
                           .toISOString().split('T')[0];
 
+        logger.info(`KAMIS API 요청: crop_code=${crop_code}, startDate=${startDate}, endDate=${endDate}`);
+
         const response = await axios.get('http://www.kamis.or.kr/service/price/xml.do', {
             params: {
                 action: 'periodProductList',
@@ -89,7 +91,7 @@ app.get('/api/kamis/price', async (req, res) => {
                 p_startday: startDate,
                 p_endday: endDate,
                 p_itemcategorycode: '200',
-                p_itemcode: crop_code,         // 선택된 작물 코드 사용
+                p_itemcode: crop_code,
                 p_kindcode: '00',
                 p_productrankcode: '04',
                 p_countrycode: '1101',
@@ -100,40 +102,51 @@ app.get('/api/kamis/price', async (req, res) => {
             }
         });
 
-        // 응답 데이터 검증 및 전달
-        if (response.data.data?.error_code === '000') {
+        // 응답 데이터가 없는 경우에도 빈 배열 반환
+        if (response.data && response.data.data) {
             logger.info('KAMIS API 데이터 조회 성공');
             
-            // 데이터 구조화
             const formattedData = {
                 status: 200,
                 message: "데이터 조회 성공",
                 data: {
                     data: {
-                        item: response.data.data.item
+                        item: response.data.data.item || []  // 데이터가 없으면 빈 배열
                     }
                 }
             };
             
             return res.status(200).json(formattedData);
         } else {
-            logger.warn('KAMIS API 데이터 없음');
-            return res.status(404).json({
-                status: 404,
-                message: "데이터가 없습니다.",
-                data: null
+            // 데이터가 없어도 200 응답과 빈 배열 반환
+            logger.info('KAMIS API 데이터 없음 - 빈 배열 반환');
+            return res.status(200).json({
+                status: 200,
+                message: "데이터 조회 성공",
+                data: {
+                    data: {
+                        item: []
+                    }
+                }
             });
         }
 
     } catch (error) {
         logger.error('KAMIS API 호출 중 오류:', { 
             error: error.message, 
-            stack: error.stack 
+            stack: error.stack,
+            params: req.query
         });
+        
+        // 서버 에러의 경우에만 500 반환
         return res.status(500).json({
             status: 500,
             message: "가격 정보 조회 중 오류가 발생했습니다.",
-            data: null
+            data: {
+                data: {
+                    item: []
+                }
+            }
         });
     }
 });
