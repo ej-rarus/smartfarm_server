@@ -76,6 +76,7 @@ app.get('/', (req, res) => {
 // KAMIS API 프록시 라우트 추가
 app.get('/api/kamis/price', async (req, res) => {
     try {
+        const { crop_code = '225' } = req.query;  // 기본값으로 토마토 설정
         const today = new Date();
         const endDate = today.toISOString().split('T')[0];
         const startDate = new Date(today.setMonth(today.getMonth() - 1))
@@ -88,7 +89,7 @@ app.get('/api/kamis/price', async (req, res) => {
                 p_startday: startDate,
                 p_endday: endDate,
                 p_itemcategorycode: '200',
-                p_itemcode: '225',
+                p_itemcode: crop_code,         // 선택된 작물 코드 사용
                 p_kindcode: '00',
                 p_productrankcode: '04',
                 p_countrycode: '1101',
@@ -102,10 +103,26 @@ app.get('/api/kamis/price', async (req, res) => {
         // 응답 데이터 검증 및 전달
         if (response.data.data?.error_code === '000') {
             logger.info('KAMIS API 데이터 조회 성공');
-            return sendResponse(res, 200, "데이터 조회 성공", response.data);
+            
+            // 데이터 구조화
+            const formattedData = {
+                status: 200,
+                message: "데이터 조회 성공",
+                data: {
+                    data: {
+                        item: response.data.data.item
+                    }
+                }
+            };
+            
+            return res.status(200).json(formattedData);
         } else {
             logger.warn('KAMIS API 데이터 없음');
-            return sendResponse(res, 404, "데이터가 없습니다.");
+            return res.status(404).json({
+                status: 404,
+                message: "데이터가 없습니다.",
+                data: null
+            });
         }
 
     } catch (error) {
@@ -113,7 +130,11 @@ app.get('/api/kamis/price', async (req, res) => {
             error: error.message, 
             stack: error.stack 
         });
-        return sendResponse(res, 500, "가격 정보 조회 중 오류가 발생했습니다.");
+        return res.status(500).json({
+            status: 500,
+            message: "가격 정보 조회 중 오류가 발생했습니다.",
+            data: null
+        });
     }
 });
 
