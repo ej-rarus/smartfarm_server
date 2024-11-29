@@ -9,7 +9,6 @@ const jwt = require('jsonwebtoken');
 const axios = require('axios'); 
 const http = require('http');
 const { WebSocketServer } = require("ws");
-const { Configuration, OpenAIApi } = require('openai');
 
 
 const app = express();
@@ -58,8 +57,7 @@ const requiredEnvVars = [
     'DB_DATABASE',
     'JWT_SECRET',
     'KAMIS_CERT_KEY',  
-    'KAMIS_API_ID',
-    'OPENAI_API_KEY'
+    'KAMIS_API_ID'     
 ];
 const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
 
@@ -420,55 +418,20 @@ wss.on("connection", (ws) => {
     console.log("Client connected");
     clients.push(ws);
 
-    // 클라이언트 메시지 처리
-    ws.on("message", async (message) => {
-        try {
-            const messageData = JSON.parse(message);
-            
-            // 채팅 메시지 처리
-            if (messageData.type === 'chat') {
-                // ChatGPT API 호출
-                const completion = await openai.createChatCompletion({
-                    model: "ft:gpt-3.5-turbo-0613:personal::8gfGCZxj",
-                    messages: [
-                        {
-                            role: "system",
-                            content: "당신은 스마트팜 전문가입니다. 농작물 재배와 관련된 질문에 친절하게 답변해주세요."
-                        },
-                        { role: "user", content: messageData.message }
-                    ],
-                });
+    // 클라이언트가 메시지를 보낼 때 처리
+    ws.on("message", (message) => {
+        const messageStr = message.toString();  // Buffer를 문자열로 변환
+        console.log("Received:", messageStr);
 
-                const response = {
-                    type: 'chat',
-                    message: completion.data.choices[0].message.content
-                };
-
-                // 응답을 요청한 클라이언트에게만 전송
-                ws.send(JSON.stringify(response));
-            } else {
-                // 기존 메시지 브로드캐스트 처리 유지
-                clients.forEach((client) => {
-                    if (client.readyState === client.OPEN) {
-                        client.send(message.toString());
-                    }
-                });
+        // 모든 클라이언트에게 받은 메시지를 브로드캐스트
+        clients.forEach((client) => {
+            if (client.readyState === client.OPEN) {
+                client.send(messageStr);  // 실제 받은 메시지를 전송
             }
-        } catch (error) {
-            logger.error('WebSocket 메시지 처리 오류:', { 
-                error: error.message, 
-                stack: error.stack 
-            });
-
-            // 에러 응답
-            ws.send(JSON.stringify({
-                type: 'error',
-                message: '메시지 처리 중 오류가 발생했습니다.'
-            }));
-        }
+        });
     });
 
-    // 기존 연결 종료 처리 유지
+    // 연결이 끊어졌을 때
     ws.on("close", () => {
         console.log("Client disconnected");
         clients = clients.filter((client) => client !== ws);
@@ -544,50 +507,5 @@ app.post('/api/signup', async (req, res) => {
         return sendResponse(res, 200, "회원가입이 성공적으로 완료되었습니다.");
     } catch (error) {
         return sendResponse(res, 500, "서버 오류가 발생했습니다.");
-    }
-});
-
-// OpenAI 설정 추가
-const configuration = new Configuration({
-    apiKey: process.env.OPENAI_API_KEY,
-});
-const openai = new OpenAIApi(configuration);
-
-// ChatGPT API 엔드포인트 추가
-app.post('/api/chat', authenticateToken, async (req, res) => {
-    try {
-        const { message } = req.body;
-
-        if (!message) {
-            return sendResponse(res, 400, "메시지를 입력해주세요.");
-        }
-
-        logger.info('ChatGPT API 요청:', { message });
-
-        const completion = await openai.createChatCompletion({
-            model: "ft:gpt-3.5-turbo-0613:personal::8gfGCZxj",
-            messages: [
-                {
-                    role: "system",
-                    content: "당신은 스마트팜 전문가입니다. 농작물 재배와 관련된 질문에 친절하게 답변해주세요."
-                },
-                { role: "user", content: message }
-            ],
-        });
-
-        logger.info('ChatGPT API 응답 성공');
-
-        return sendResponse(res, 200, "챗봇 응답 성공", {
-            message: completion.data.choices[0].message.content
-        });
-
-    } catch (error) {
-        logger.error('ChatGPT API 오류:', { 
-            error: error.message, 
-            stack: error.stack,
-            message: req.body.message 
-        });
-
-        return sendResponse(res, 500, "챗봇 응답 처리 중 오류가 발생했습니다.");
     }
 });
