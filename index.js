@@ -494,12 +494,13 @@ app.get('/stream', (req, res) => {
         '-rtsp_transport', 'tcp',
         '-i', rtspUrl,
         '-f', 'mjpeg',
-        '-vf', 'scale=320:240',  // 해상도를 320x240으로 낮춤
-        '-qscale:v', '20',       // 화질을 더 낮춤 (높은 값 = 낮은 화질)
-        '-r', '10',              // 프레임레이트도 낮춤
-        '-tune', 'zerolatency',
-        '-preset', 'ultrafast',
-        '-an',
+        '-vf', 'scale=320:240',    // 낮은 해상도 유지
+        '-qscale:v', '20',         // 낮은 화질 유지
+        '-r', '5',                 // 프레임레이트를 더 낮춤 (5fps)
+        '-preset', 'medium',       // 인코딩 프리셋을 'medium'으로 변경
+        '-bufsize', '2M',          // 버퍼 크기 설정
+        '-maxrate', '1M',          // 최대 비트레이트 제한
+        '-an',                     // 오디오 제외
         '-'
     ]);
 
