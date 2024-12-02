@@ -9,13 +9,12 @@ const jwt = require('jsonwebtoken');
 const axios = require('axios'); 
 const http = require('http');
 const { WebSocketServer } = require("ws");
-const { Configuration, OpenAIApi } = require('openai');
+const OpenAI = require('openai');
 
 // OpenAI 설정
-const configuration = new Configuration({
+const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
-const openai = new OpenAIApi(configuration);
 
 const app = express();
 app.use(express.json());
@@ -442,6 +441,14 @@ wss.on("connection", (ws) => {
         console.log("Client disconnected");
         clients = clients.filter((client) => client !== ws);
     });
+
+    // WebSocket 연결에 대한 에러 처리 추가
+    ws.on("error", (error) => {
+        logger.error('WebSocket 클라이언트 에러:', { 
+            error: error.message, 
+            stack: error.stack 
+        });
+    });
 });
 
 // WebSocket 에러 처리 추가
@@ -513,12 +520,11 @@ app.post('/api/signup', async (req, res) => {
         return sendResponse(res, 200, "회원가입이 성공적으로 완료되었습니다.");
     } catch (error) {
         return sendResponse(res, 500, "서버 오류가 발생했습니다.");
-
     }
 });
 
 // 챗봇 엔드포인트 추가
-app.post('/api/chat', authenticateToken, async (req, res) => {
+app.post('/api/v1/chat', authenticateToken, async (req, res) => {
     try {
         const { message } = req.body;
         
@@ -526,7 +532,7 @@ app.post('/api/chat', authenticateToken, async (req, res) => {
             return sendResponse(res, 400, "메시지를 입력해주세요.");
         }
 
-        const completion = await openai.createChatCompletion({
+        const completion = await openai.chat.completions.create({
             model: "gpt-3.5-turbo",
             messages: [
                 {
@@ -542,7 +548,7 @@ app.post('/api/chat', authenticateToken, async (req, res) => {
             max_tokens: 1000
         });
 
-        const botResponse = completion.data.choices[0].message.content;
+        const botResponse = completion.choices[0].message.content;
         return sendResponse(res, 200, "성공", { message: botResponse });
 
     } catch (error) {
