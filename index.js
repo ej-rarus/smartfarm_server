@@ -556,11 +556,12 @@ app.post('/api/chat', authenticateToken, async (req, res) => {
                 ],
             });
 
-            const botResponse = completion.choices[0].message.content;
+            const botResponse = completion.choices[0].message;
             logger.info('챗봇 응답 성공');
             
             return sendResponse(res, 200, "성공", { 
-                message: botResponse 
+                role: botResponse.role,
+                content: botResponse.content
             });
 
         } catch (openaiError) {
