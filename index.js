@@ -524,7 +524,7 @@ app.post('/api/signup', async (req, res) => {
 });
 
 // 챗봇 엔드포인트 추가
-app.post('/api/v1/chat', authenticateToken, async (req, res) => {
+app.post('/api/chat', authenticateToken, async (req, res) => {
     try {
         const { message } = req.body;
         
