@@ -9,7 +9,13 @@ const jwt = require('jsonwebtoken');
 const axios = require('axios'); 
 const http = require('http');
 const { WebSocketServer } = require("ws");
+const { Configuration, OpenAIApi } = require('openai');
 
+// OpenAI 설정
+const configuration = new Configuration({
+    apiKey: process.env.OPENAI_API_KEY,
+});
+const openai = new OpenAIApi(configuration);
 
 const app = express();
 app.use(express.json());
@@ -507,5 +513,43 @@ app.post('/api/signup', async (req, res) => {
         return sendResponse(res, 200, "회원가입이 성공적으로 완료되었습니다.");
     } catch (error) {
         return sendResponse(res, 500, "서버 오류가 발생했습니다.");
+
+    }
+});
+
+// 챗봇 엔드포인트 추가
+app.post('/api/chat', authenticateToken, async (req, res) => {
+    try {
+        const { message } = req.body;
+        
+        if (!message) {
+            return sendResponse(res, 400, "메시지를 입력해주세요.");
+        }
+
+        const completion = await openai.createChatCompletion({
+            model: "gpt-3.5-turbo",
+            messages: [
+                {
+                    role: "system",
+                    content: "당신은 스마트팜 관련 전문가입니다. 농작물 재배, 환경 관리, 질병 관리 등에 대해 도움을 주세요."
+                },
+                {
+                    role: "user",
+                    content: message
+                }
+            ],
+            temperature: 0.7,
+            max_tokens: 1000
+        });
+
+        const botResponse = completion.data.choices[0].message.content;
+        return sendResponse(res, 200, "성공", { message: botResponse });
+
+    } catch (error) {
+        logger.error('챗봇 응답 생성 중 오류:', { 
+            error: error.message, 
+            stack: error.stack 
+        });
+        return sendResponse(res, 500, "챗봇 응답 생성 중 오류가 발생했습니다.");
     }
 });
