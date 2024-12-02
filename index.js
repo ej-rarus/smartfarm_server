@@ -528,31 +528,53 @@ app.post('/api/chat', authenticateToken, async (req, res) => {
     try {
         const { message } = req.body;
         
+        // 메시지 유효성 검사
         if (!message) {
             return sendResponse(res, 400, "메시지를 입력해주세요.");
         }
 
-        const completion = await openai.chat.completions.create({
-            model: "gpt-3.5-turbo",
-            messages: [
-                {
-                    role: "system",
-                    content: "당신은 스마트팜 관련 전문가입니다. 농작물 재배, 환경 관리, 질병 관리 등에 대해 도움을 주세요."
-                },
-                {
-                    role: "user",
-                    content: message
-                }
-            ],
-            temperature: 0.7,
-            max_tokens: 1000
-        });
+        // OpenAI API 키 확인
+        if (!process.env.OPENAI_API_KEY) {
+            logger.error('OpenAI API 키가 설정되지 않았습니다.');
+            return sendResponse(res, 500, "서버 설정 오류가 발생했습니다.");
+        }
 
-        const botResponse = completion.choices[0].message.content;
-        return sendResponse(res, 200, "성공", { message: botResponse });
+        logger.info('챗봇 요청:', { message });
+
+        try {
+            const completion = await openai.chat.completions.create({
+                model: "gpt-3.5-turbo",
+                messages: [
+                    {
+                        role: "system",
+                        content: "당신은 스마트팜 관련 전문가입니다. 농작물 재배, 환경 관리, 질병 관리 등에 대해 도움을 주세요."
+                    },
+                    {
+                        role: "user",
+                        content: message
+                    }
+                ],
+                temperature: 0.7,
+                max_tokens: 1000
+            });
+
+            const botResponse = completion.choices[0].message.content;
+            logger.info('챗봇 응답 성공');
+            
+            return sendResponse(res, 200, "성공", { 
+                message: botResponse 
+            });
+
+        } catch (openaiError) {
+            logger.error('OpenAI API 호출 오류:', { 
+                error: openaiError.message, 
+                stack: openaiError.stack 
+            });
+            return sendResponse(res, 500, "AI 응답 생성 중 오류가 발생했습니다.");
+        }
 
     } catch (error) {
-        logger.error('챗봇 응답 생성 중 오류:', { 
+        logger.error('챗봇 처리 중 오류:', { 
             error: error.message, 
             stack: error.stack 
         });
