@@ -543,7 +543,7 @@ app.post('/api/chat', authenticateToken, async (req, res) => {
 
         try {
             const completion = await openai.chat.completions.create({
-                model: "gpt-4o",
+                model: "gpt-4",
                 messages: [
                     {
                         role: "system",
@@ -556,12 +556,17 @@ app.post('/api/chat', authenticateToken, async (req, res) => {
                 ],
             });
 
+            // API 응답 로깅 추가
+            logger.info('OpenAI API 응답:', completion.choices[0]);
+
             const botResponse = completion.choices[0].message;
             logger.info('챗봇 응답 성공');
             
-            return sendResponse(res, 200, "성공", { 
-                role: botResponse.role,
-                content: botResponse.content
+            // 응답 구조 수정
+            return res.status(200).json({
+                status: 200,
+                message: "성공",
+                data: botResponse
             });
 
         } catch (openaiError) {
