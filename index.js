@@ -12,6 +12,40 @@ const { WebSocketServer } = require("ws");
 const OpenAI = require('openai');
 const path = require('path');
 const multer = require('multer');
+const fs = require('fs');
+
+// uploads 디렉토리 확인 및 생성
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)){
+    fs.mkdirSync(uploadsDir);
+}
+
+// multer 설정
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, 'uploads/');
+    },
+    filename: function (req, file, cb) {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, uniqueSuffix + '-' + file.originalname);
+    }
+});
+
+const fileFilter = (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+        cb(null, true);
+    } else {
+        cb(new Error('이미지 파일만 업로드 가능합니다.'), false);
+    }
+};
+
+const upload = multer({ 
+    storage: storage,
+    limits: {
+        fileSize: 5 * 1024 * 1024 // 5MB 제한
+    },
+    fileFilter: fileFilter
+});
 
 // OpenAI 설정
 const openai = new OpenAI({
@@ -256,7 +290,7 @@ app.post('/api/signup', async (req, res) => {
                 console.error("회원가입 중 오류:", err);
                 return res.status(500).send("회원가입 중 오류가 발생했습니다.");
             }
-            res.status(200).send("회원가입이 ���공적으로 완료되었습니다.");
+            res.status(200).send("회원가입이 성공적으로 완료되었습니다.");
         });
     } catch (error) {
         console.error("서버 오류:", error);
@@ -373,78 +407,24 @@ app.get('/api/profile', authenticateToken, async (req, res) => {
     }
 });
 
-// 게시글 저장을 위한 POST 요청 처리 (이미지 업로드 포함)
+// 게시글 저장을 위한 POST 요청 처리
 app.post('/api/diary', authenticateToken, upload.single('image'), async (req, res) => {
     try {
         const { post_title, post_category, author, post_content } = req.body;
         
-        // 입력값 검증
         if (!post_title || !post_category || !author || !post_content) {
-            return res.status(400).json({
-                status: 400,
-                message: "필수 필드를 모두 입력해주세요.",
-                data: null
-            });
+            return sendResponse(res, 400, "필수 필드를 모두 입력해주세요.");
         }
-
-        // 이미지 파일 경로 설정
-        const imagePath = req.file ? req.file.filename : null;
 
         const query = `INSERT INTO ${TABLES.DIARY} 
-            (post_title, post_category, author, post_content, image, create_date) 
-            VALUES (?, ?, ?, ?, ?, NOW())`;
-            
-        await executeQuery(query, [
-            post_title, 
-            post_category, 
-            author, 
-            post_content, 
-            imagePath
-        ]);
-
-        // 클라이언트가 기대하는 응답 형식으로 변경
-        return res.status(200).json({
-            status: 200,
-            message: "게시글이 성공적으로 저장되었습니다.",
-            data: null
-        });
-
+            (post_title, post_category, author, post_content, create_date) 
+            VALUES (?, ?, ?, ?, NOW())`;
+        await executeQuery(query, [post_title, post_category, author, post_content]);
+        return sendResponse(res, 200, "게시글이 성공적으로 저장되었습니다.");
     } catch (error) {
         logger.error('게시글 저장 중 오류 발생:', error);
-        return res.status(500).json({
-            status: 500,
-            message: "게시글 저장 중 오류가 발생했습니다.",
-            data: null
-        });
+        return sendResponse(res, 500, "게시글 저장 중 오류가 발생했습니다.");
     }
-});
-
-// multer 에러 핸들링 미들웨어 수정
-app.use((error, req, res, next) => {
-    if (error instanceof multer.MulterError) {
-        if (error.code === 'LIMIT_FILE_SIZE') {
-            return res.status(400).json({
-                status: 400,
-                message: "파일 크기는 5MB를 초과할 수 없습니다.",
-                data: null
-            });
-        }
-        return res.status(400).json({
-            status: 400,
-            message: "파일 업로드 중 오류가 발생했습니다.",
-            data: null
-        });
-    }
-    
-    if (error.message === '이미지 파일만 업로드 가능합니다.') {
-        return res.status(400).json({
-            status: 400,
-            message: error.message,
-            data: null
-        });
-    }
-    
-    next(error);
 });
 
 
@@ -505,7 +485,7 @@ wss.on("connection", (ws) => {
         const messageStr = message.toString();  // Buffer를 문자열로 변환
         console.log("Received:", messageStr);
 
-        // 모든 클라이언트에게 받은 메시지를 브로드캐스트
+        // 모든 클라이언트에게 받은 메시지�� 브로드캐스트
         clients.forEach((client) => {
             if (client.readyState === client.OPEN) {
                 client.send(messageStr);  // 실제 받은 메시지를 전송
@@ -580,7 +560,7 @@ const executeQuery = (sql, params) => {
     });
 };
 
-// 응답 형식을 ��관되게 유지
+// 응답 형식을 일관되게 유지
 const sendResponse = (res, status, message, data = null) => {
     const response = {
         status,
@@ -600,7 +580,7 @@ app.post('/api/signup', async (req, res) => {
     }
 });
 
-// 챗봇 엔드포인트 추가
+// 챗봇 엔드포인��� 추가
 app.post('/api/chat', authenticateToken, async (req, res) => {
     try {
         const { message } = req.body;
