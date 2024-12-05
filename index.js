@@ -202,9 +202,9 @@ app.get('/api/diary/:id', async (req, res) => {
             return sendResponse(res, 404, "게시글을 찾을 수 없습니다.");
         }
 
-        // 이미�� 경로가 있는 경우 전체 URL로 변환
+        // 이미�� 경로 처리 - /uploads/ 접두사가 이미 있는지 확인
         const post = results[0];
-        if (post.image) {
+        if (post.image && !post.image.startsWith('/uploads/')) {
             post.image = `/uploads/${post.image}`;
         }
 
@@ -278,7 +278,7 @@ app.post('/api/login', async (req, res) => {
         const results = await executeQuery(query, [email_adress]);
 
         if (results.length === 0) {
-            logger.info(`로그인 실���: 존재하지 않는 이메일 - ${email_adress}`);
+            logger.info(`로그인 실패: 존재하지 않는 이메일 - ${email_adress}`);
             return sendResponse(res, 401, "이메일 또는 비밀번호가 올바르지 않습니다.");
         }
 
@@ -362,7 +362,7 @@ app.get('/api/profile', authenticateToken, async (req, res) => {
             return sendResponse(res, 404, "사용자를 찾을 수 없습니다.");
         }
 
-        return sendResponse(res, 200, "프로필 회 성공", results[0]);
+        return sendResponse(res, 200, "프로필 조회 성공", results[0]);
     } catch (error) {
         logger.error('프로필 조회 중 오류 발생:', { 
             error: error.message, 
@@ -525,7 +525,7 @@ const executeQuery = (sql, params) => {
     });
 };
 
-// ���답 형식을 일관되게 유지
+// 응답 형식을 일관되게 유지
 const sendResponse = (res, status, message, data = null) => {
     const response = {
         status,
