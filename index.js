@@ -10,6 +10,8 @@ const axios = require('axios');
 const http = require('http');
 const { WebSocketServer } = require("ws");
 const OpenAI = require('openai');
+const multer = require('multer');
+const path = require('path');
 
 // OpenAI 설정
 const openai = new OpenAI({
@@ -169,32 +171,41 @@ app.get('/api/users', (req, res) => {
     });
 });
 
-// 모든 DIARY 게시글 정보 가져오기
-app.get('/api/diary', (req, res) => {
-    db.query(`SELECT * FROM ${TABLES.DIARY}`, (err, results) => {
-        if (err) {
-            logger.error('쿼리 실행 중 오류 발생:', err);
-            res.status(500).send('500 서버 오류');
-            return;
-        }
-        res.json(results);
-    });
+// 모든 DIARY 게시글 정보 가져오기 (is_delete가 false인 것만)
+app.get('/api/diary', async (req, res) => {
+    try {
+        const query = `
+            SELECT post_id, post_title, post_category, author, post_content, 
+                   create_date, update_date, image 
+            FROM ${TABLES.DIARY} 
+            WHERE is_delete = false 
+            ORDER BY create_date DESC`;
+        const results = await executeQuery(query);
+        return sendResponse(res, 200, "게시글 목록 조회 성공", results);
+    } catch (err) {
+        logger.error('게시글 조회 중 오류 발생:', err);
+        return sendResponse(res, 500, "게시글 조회 중 오류가 발생했습니다.");
+    }
 });
 
 // 특정 DIARY 게시글 정보 가져오기
 app.get('/api/diary/:id', async (req, res) => {
     try {
         const diaryId = req.params.id;
-        const query = `SELECT * FROM ${TABLES.DIARY} WHERE post_id = ?`;
+        const query = `
+            SELECT post_id, post_title, post_category, author, post_content, 
+                   create_date, update_date, image 
+            FROM ${TABLES.DIARY} 
+            WHERE post_id = ? AND is_delete = false`;
         const results = await executeQuery(query, [diaryId]);
         
         if (results.length === 0) {
-            return res.status(404).send('게시글을 찾을 수 없습니다.');
+            return sendResponse(res, 404, "게시글을 찾을 수 없습니다.");
         }
-        res.json(results[0]);
+        return sendResponse(res, 200, "게시글 조회 성공", results[0]);
     } catch (err) {
-        console.error('쿼리 실행 중 오류 발생:', err);
-        res.status(500).send('500 서버 오류');
+        logger.error('게시글 조회 중 오류 발생:', err);
+        return sendResponse(res, 500, "게시글 조회 중 오류가 발생했습니다.");
     }
 });
 
@@ -355,19 +366,116 @@ app.get('/api/profile', authenticateToken, async (req, res) => {
     }
 });
 
-// 게시글 저장을 위한 POST 요청 처리
-app.post('/api/diary', authenticateToken, async (req, res) => {
-    const { post_title, post_category, author, content } = req.body;
-    
-    if (!post_title || !post_category || !author || !content) {
-        return sendResponse(res, 400, "모든 필수 필드를 입력해주세요.");
+// 이미지 저장을 위한 multer 설정
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'uploads/');  // 업로드 디렉토리
+    },
+    filename: (req, file, cb) => {
+        cb(null, Date.now() + '-' + file.originalname);  // 파일명 중복 방지
     }
+});
 
-    const query = `INSERT INTO ${TABLES.DIARY} 
-        (post_title, post_category, author, post_content, create_date) 
-        VALUES (?, ?, ?, ?, NOW())`;
-    await executeQuery(query, [post_title, post_category, author, content]);
-    return sendResponse(res, 200, "게시글이 성공적으로 저장되었습니다.");
+const upload = multer({ 
+    storage: storage,
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB 제한
+    fileFilter: (req, file, cb) => {
+        const allowedTypes = /jpeg|jpg|png|gif/;
+        const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+        if (extname) {
+            return cb(null, true);
+        }
+        cb(new Error('이미지 파일만 업로드 가능합니다!'));
+    }
+});
+
+// 정적 파일 제공
+app.use('/uploads', express.static('uploads'));
+
+// 게시글 작성 엔드포인트 수정
+app.post('/api/diary', authenticateToken, upload.single('image'), async (req, res) => {
+    try {
+        const { post_title, post_category, author, post_content } = req.body;
+        const image = req.file ? `/uploads/${req.file.filename}` : null;
+        
+        if (!post_title || !post_category || !author || !post_content) {
+            return sendResponse(res, 400, "필수 필드를 모두 입력해주세요.");
+        }
+
+        const query = `
+            INSERT INTO ${TABLES.DIARY} 
+            (post_title, post_category, author, post_content, create_date, is_delete, image) 
+            VALUES (?, ?, ?, ?, NOW(), false, ?)`;
+        
+        await executeQuery(query, [post_title, post_category, author, post_content, image]);
+        return sendResponse(res, 200, "게시글이 성공적으로 저장되었습니다.");
+    } catch (error) {
+        logger.error('게시글 저장 중 오류 발생:', error);
+        return sendResponse(res, 500, "게시글 저장 중 오류가 발생했습니다.");
+    }
+});
+
+// 게시글 수정
+app.put('/api/diary/:id', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { post_title, post_category, author, post_content, image } = req.body;
+
+        if (!post_title || !post_category || !author || !post_content) {
+            return sendResponse(res, 400, "필수 필드를 모두 입력해주세요.");
+        }
+
+        const query = `
+            UPDATE ${TABLES.DIARY} 
+            SET post_title = ?, 
+                post_category = ?, 
+                author = ?, 
+                post_content = ?, 
+                update_date = NOW(),
+                image = ?
+            WHERE post_id = ? AND is_delete = false`;
+
+        const result = await executeQuery(query, [
+            post_title, 
+            post_category, 
+            author, 
+            post_content, 
+            image, 
+            id
+        ]);
+
+        if (result.affectedRows === 0) {
+            return sendResponse(res, 404, "해당 ID의 게시글을 찾을 수 없습니다.");
+        }
+
+        return sendResponse(res, 200, "게시글이 성공적으로 수정되었습니다.");
+    } catch (error) {
+        logger.error('게시글 수정 중 오류 발생:', error);
+        return sendResponse(res, 500, "게시글 수정 중 오류가 발생했습니다.");
+    }
+});
+
+// 게시글 삭제 (소프트 삭제)
+app.delete('/api/diary/:id', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const query = `
+            UPDATE ${TABLES.DIARY} 
+            SET is_delete = true, 
+                update_date = NOW() 
+            WHERE post_id = ?`;
+
+        const result = await executeQuery(query, [id]);
+
+        if (result.affectedRows === 0) {
+            return sendResponse(res, 404, "해당 ID의 게시글을 찾을 수 없습니다.");
+        }
+
+        return sendResponse(res, 200, "게시글이 성공적으로 삭제되었습니다.");
+    } catch (error) {
+        logger.error('게시글 삭제 중 오류 발생:', error);
+        return sendResponse(res, 500, "게시글 삭제 중 오류가 발생했습니다.");
+    }
 });
 
 
