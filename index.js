@@ -10,7 +10,6 @@ const axios = require('axios');
 const http = require('http');
 const { WebSocketServer } = require("ws");
 const OpenAI = require('openai');
-const multer = require('multer');
 const path = require('path');
 
 // OpenAI 설정
@@ -125,7 +124,7 @@ app.get('/api/kamis/price', async (req, res) => {
             
             return res.status(200).json(formattedData);
         } else {
-            // 데이터가 없어도 200 응답과 빈 배열 반환
+            // 데이터가 없���도 200 응답과 빈 배열 반환
             logger.info('KAMIS API 데이터 없음 - 빈 배열 반환');
             return res.status(200).json({
                 status: 200,
@@ -202,7 +201,14 @@ app.get('/api/diary/:id', async (req, res) => {
         if (results.length === 0) {
             return sendResponse(res, 404, "게시글을 찾을 수 없습니다.");
         }
-        return sendResponse(res, 200, "게시글 조회 성공", results[0]);
+
+        // 이미�� 경로가 있는 경우 전체 URL로 변환
+        const post = results[0];
+        if (post.image) {
+            post.image = `/uploads/${post.image}`;
+        }
+
+        return sendResponse(res, 200, "게시글 조회 성공", post);
     } catch (err) {
         logger.error('게시글 조회 중 오류 발생:', err);
         return sendResponse(res, 500, "게시글 조회 중 오류가 발생했습니다.");
@@ -272,7 +278,7 @@ app.post('/api/login', async (req, res) => {
         const results = await executeQuery(query, [email_adress]);
 
         if (results.length === 0) {
-            logger.info(`로그인 실패: 존재하지 않는 이메일 - ${email_adress}`);
+            logger.info(`로그인 실���: 존재하지 않는 이메일 - ${email_adress}`);
             return sendResponse(res, 401, "이메일 또는 비밀번호가 올바르지 않습니다.");
         }
 
@@ -356,7 +362,7 @@ app.get('/api/profile', authenticateToken, async (req, res) => {
             return sendResponse(res, 404, "사용자를 찾을 수 없습니다.");
         }
 
-        return sendResponse(res, 200, "프로필 조회 성공", results[0]);
+        return sendResponse(res, 200, "프로필 회 성공", results[0]);
     } catch (error) {
         logger.error('프로필 조회 중 오류 발생:', { 
             error: error.message, 
@@ -366,115 +372,23 @@ app.get('/api/profile', authenticateToken, async (req, res) => {
     }
 });
 
-// 이미지 저장을 위한 multer 설정
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'uploads/');  // 업로드 디렉토리
-    },
-    filename: (req, file, cb) => {
-        cb(null, Date.now() + '-' + file.originalname);  // 파일명 중복 방지
-    }
-});
-
-const upload = multer({ 
-    storage: storage,
-    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB 제한
-    fileFilter: (req, file, cb) => {
-        const allowedTypes = /jpeg|jpg|png|gif/;
-        const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-        if (extname) {
-            return cb(null, true);
-        }
-        cb(new Error('이미지 파일만 업로드 가능합니다!'));
-    }
-});
-
-// 정적 파일 제공
-app.use('/uploads', express.static('uploads'));
-
-// 게시글 작성 엔드포인트 수정
-app.post('/api/diary', authenticateToken, upload.single('image'), async (req, res) => {
+// 게시글 저장을 위한 POST 요청 처리
+app.post('/api/diary', authenticateToken, async (req, res) => {
     try {
-        const { post_title, post_category, author, post_content } = req.body;
-        const image = req.file ? `/uploads/${req.file.filename}` : null;
+        const { post_title, post_category, author, post_content, image } = req.body;
         
         if (!post_title || !post_category || !author || !post_content) {
             return sendResponse(res, 400, "필수 필드를 모두 입력해주세요.");
         }
 
-        const query = `
-            INSERT INTO ${TABLES.DIARY} 
-            (post_title, post_category, author, post_content, create_date, is_delete, image) 
-            VALUES (?, ?, ?, ?, NOW(), false, ?)`;
-        
-        await executeQuery(query, [post_title, post_category, author, post_content, image]);
+        const query = `INSERT INTO ${TABLES.DIARY} 
+            (post_title, post_category, author, post_content, create_date) 
+            VALUES (?, ?, ?, ?, NOW())`;
+        await executeQuery(query, [post_title, post_category, author, post_content]);
         return sendResponse(res, 200, "게시글이 성공적으로 저장되었습니다.");
     } catch (error) {
         logger.error('게시글 저장 중 오류 발생:', error);
         return sendResponse(res, 500, "게시글 저장 중 오류가 발생했습니다.");
-    }
-});
-
-// 게시글 수정
-app.put('/api/diary/:id', authenticateToken, async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { post_title, post_category, author, post_content, image } = req.body;
-
-        if (!post_title || !post_category || !author || !post_content) {
-            return sendResponse(res, 400, "필수 필드를 모두 입력해주세요.");
-        }
-
-        const query = `
-            UPDATE ${TABLES.DIARY} 
-            SET post_title = ?, 
-                post_category = ?, 
-                author = ?, 
-                post_content = ?, 
-                update_date = NOW(),
-                image = ?
-            WHERE post_id = ? AND is_delete = false`;
-
-        const result = await executeQuery(query, [
-            post_title, 
-            post_category, 
-            author, 
-            post_content, 
-            image, 
-            id
-        ]);
-
-        if (result.affectedRows === 0) {
-            return sendResponse(res, 404, "해당 ID의 게시글을 찾을 수 없습니다.");
-        }
-
-        return sendResponse(res, 200, "게시글이 성공적으로 수정되었습니다.");
-    } catch (error) {
-        logger.error('게시글 수정 중 오류 발생:', error);
-        return sendResponse(res, 500, "게시글 수정 중 오류가 발생했습니다.");
-    }
-});
-
-// 게시글 삭제 (소프트 삭제)
-app.delete('/api/diary/:id', authenticateToken, async (req, res) => {
-    try {
-        const { id } = req.params;
-        const query = `
-            UPDATE ${TABLES.DIARY} 
-            SET is_delete = true, 
-                update_date = NOW() 
-            WHERE post_id = ?`;
-
-        const result = await executeQuery(query, [id]);
-
-        if (result.affectedRows === 0) {
-            return sendResponse(res, 404, "해당 ID의 게시글을 찾을 수 없습니다.");
-        }
-
-        return sendResponse(res, 200, "게시글이 성공적으로 삭제되었습니다.");
-    } catch (error) {
-        logger.error('게시글 삭제 중 오류 발생:', error);
-        return sendResponse(res, 500, "게시글 삭제 중 오류가 발생했습니다.");
     }
 });
 
@@ -611,7 +525,7 @@ const executeQuery = (sql, params) => {
     });
 };
 
-// 응답 형식을 일관되게 유지
+// ���답 형식을 일관되게 유지
 const sendResponse = (res, status, message, data = null) => {
     const response = {
         status,
@@ -655,7 +569,7 @@ app.post('/api/chat', authenticateToken, async (req, res) => {
                 messages: [
                     {
                         role: "system",
-                        content: "너는 이제 장협봇이야. 농사에 대해서 특히 스마트팜에 대해서 모르는 게 없지만 엄청 예민하고 까칠해. 농작물 재배, 환경 관리, 질병 관리 등에 대해 도움을 주면돼. 말투는 이런식이래:  왜요 / 뭐가 문제인데요 / 시들었어요? 물 줘요 / 물 많아요? 그럼 과습인가보죠 / 또 시작이네 아으 / 당연한 질문은 하지 마시라고요 으으으으!!"
+                        content: "너는 이제 장협봇이야. 농사에 대해서 특히 스마트팜에 대해서 모르는 게 없지만 엄청 예민하고 까칠해. 농작물 재배, 환경 관리, 질병 관리 등에 대해 도움을 주면돼. 말투는 이런식이래:  왜요 / 뭐가 문제인데 / 시들었어요? 물 줘요 / 물 많아요? 그럼 과습인가보죠 / 또 시작이네 아으 / 당연한 질문은 하지 마시라고요 으으으으!!"
                     },
                     {
                         role: "user",
@@ -693,3 +607,6 @@ app.post('/api/chat', authenticateToken, async (req, res) => {
         return sendResponse(res, 500, "챗봇 응답 생성 중 오류가 발생했습니다.");
     }
 });
+
+// 정적 파일 제공을 위한 미들웨어 추가
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
