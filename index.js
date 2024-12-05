@@ -11,7 +11,7 @@ const http = require('http');
 const { WebSocketServer } = require("ws");
 const OpenAI = require('openai');
 const path = require('path');
-const fs = require('fs');
+const multer = require('multer');
 
 // OpenAI 설정
 const openai = new OpenAI({
@@ -373,24 +373,78 @@ app.get('/api/profile', authenticateToken, async (req, res) => {
     }
 });
 
-// 게시글 저장을 위한 POST 요청 처리
-app.post('/api/diary', authenticateToken, async (req, res) => {
+// 게시글 저장을 위한 POST 요청 처리 (이미지 업로드 포함)
+app.post('/api/diary', authenticateToken, upload.single('image'), async (req, res) => {
     try {
-        const { post_title, post_category, author, post_content, image } = req.body;
+        const { post_title, post_category, author, post_content } = req.body;
         
+        // 입력값 검증
         if (!post_title || !post_category || !author || !post_content) {
-            return sendResponse(res, 400, "필수 필드를 모두 입력해주세요.");
+            return res.status(400).json({
+                status: 400,
+                message: "필수 필드를 모두 입력해주세요.",
+                data: null
+            });
         }
 
+        // 이미지 파일 경로 설정
+        const imagePath = req.file ? req.file.filename : null;
+
         const query = `INSERT INTO ${TABLES.DIARY} 
-            (post_title, post_category, author, post_content, create_date) 
-            VALUES (?, ?, ?, ?, NOW())`;
-        await executeQuery(query, [post_title, post_category, author, post_content]);
-        return sendResponse(res, 200, "게시글이 성공적으로 저장되었습니다.");
+            (post_title, post_category, author, post_content, image, create_date) 
+            VALUES (?, ?, ?, ?, ?, NOW())`;
+            
+        await executeQuery(query, [
+            post_title, 
+            post_category, 
+            author, 
+            post_content, 
+            imagePath
+        ]);
+
+        // 클라이언트가 기대하는 응답 형식으로 변경
+        return res.status(200).json({
+            status: 200,
+            message: "게시글이 성공적으로 저장되었습니다.",
+            data: null
+        });
+
     } catch (error) {
         logger.error('게시글 저장 중 오류 발생:', error);
-        return sendResponse(res, 500, "게시글 저장 중 오류가 발생했습니다.");
+        return res.status(500).json({
+            status: 500,
+            message: "게시글 저장 중 오류가 발생했습니다.",
+            data: null
+        });
     }
+});
+
+// multer 에러 핸들링 미들웨어 수정
+app.use((error, req, res, next) => {
+    if (error instanceof multer.MulterError) {
+        if (error.code === 'LIMIT_FILE_SIZE') {
+            return res.status(400).json({
+                status: 400,
+                message: "파일 크기는 5MB를 초과할 수 없습니다.",
+                data: null
+            });
+        }
+        return res.status(400).json({
+            status: 400,
+            message: "파일 업로드 중 오류가 발생했습니다.",
+            data: null
+        });
+    }
+    
+    if (error.message === '이미지 파일만 업로드 가능합니다.') {
+        return res.status(400).json({
+            status: 400,
+            message: error.message,
+            data: null
+        });
+    }
+    
+    next(error);
 });
 
 
@@ -459,7 +513,7 @@ wss.on("connection", (ws) => {
         });
     });
 
-    // 연결이 ��어졌을 때
+    // 연결이 끊어졌을 때
     ws.on("close", () => {
         console.log("Client disconnected");
         clients = clients.filter((client) => client !== ws);
@@ -526,7 +580,7 @@ const executeQuery = (sql, params) => {
     });
 };
 
-// 응답 형식을 일관되게 유지
+// 응답 형식을 ��관되게 유지
 const sendResponse = (res, status, message, data = null) => {
     const response = {
         status,
@@ -553,7 +607,7 @@ app.post('/api/chat', authenticateToken, async (req, res) => {
         
         // 메시지 유효성 검사
         if (!message) {
-            return sendResponse(res, 400, "메시지��� 입력해주세요.");
+            return sendResponse(res, 400, "메시지를 입력해주세요.");
         }
 
         // OpenAI API 키 확인
@@ -611,10 +665,3 @@ app.post('/api/chat', authenticateToken, async (req, res) => {
 
 // 정적 파일 제공을 위한 미들웨어 추가
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// 서버 시작 전 uploads 디렉토리 확인
-const uploadsDir = path.join(__dirname, 'uploads');
-
-if (!fs.existsSync(uploadsDir)){
-    fs.mkdirSync(uploadsDir);
-}
