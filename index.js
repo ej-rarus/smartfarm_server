@@ -403,7 +403,7 @@ app.get('/api/profile', authenticateToken, async (req, res) => {
             error: error.message, 
             stack: error.stack 
         });
-        return sendResponse(res, 500, "프로필 조회 중 오류가 발생했습니다.");
+        return sendResponse(res, 500, "프로필 조회 중 오류��� 발생했습니다.");
     }
 });
 
@@ -412,18 +412,55 @@ app.post('/api/diary', authenticateToken, upload.single('image'), async (req, re
     try {
         const { post_title, post_category, author, post_content } = req.body;
         
+        // 입력값 검증
         if (!post_title || !post_category || !author || !post_content) {
-            return sendResponse(res, 400, "필수 필드를 모두 입력해주세요.");
+            return res.status(400).json({
+                status: 400,
+                message: "필수 필드를 모두 입력해주세요.",
+                data: null
+            });
         }
 
-        const query = `INSERT INTO ${TABLES.DIARY} 
-            (post_title, post_category, author, post_content, create_date) 
-            VALUES (?, ?, ?, ?, NOW())`;
-        await executeQuery(query, [post_title, post_category, author, post_content]);
-        return sendResponse(res, 200, "게시글이 성공적으로 저장되었습니다.");
+        // 이미지 파일 처리
+        let imagePath = null;
+        if (req.file) {
+            imagePath = req.file.filename;
+            logger.info('이미지 업로드 성공:', imagePath);
+        }
+
+        // 데이터베이스에 저장
+        const query = `
+            INSERT INTO ${TABLES.DIARY} 
+            (post_title, post_category, author, post_content, image, create_date, is_delete) 
+            VALUES (?, ?, ?, ?, ?, NOW(), false)
+        `;
+            
+        const result = await executeQuery(query, [
+            post_title, 
+            post_category, 
+            author, 
+            post_content, 
+            imagePath
+        ]);
+
+        logger.info('게시글 저장 성공:', result);
+
+        return res.status(200).json({
+            status: 200,
+            message: "게시글이 성공적으로 저장되었습니다.",
+            data: {
+                post_id: result.insertId,
+                image: imagePath
+            }
+        });
+
     } catch (error) {
         logger.error('게시글 저장 중 오류 발생:', error);
-        return sendResponse(res, 500, "게시글 저장 중 오류가 발생했습니다.");
+        return res.status(500).json({
+            status: 500,
+            message: "게시글 저장 중 오류가 발생했습니다.",
+            data: null
+        });
     }
 });
 
@@ -485,7 +522,7 @@ wss.on("connection", (ws) => {
         const messageStr = message.toString();  // Buffer를 문자열로 변환
         console.log("Received:", messageStr);
 
-        // 모든 클라이언트에게 받은 메시지�� 브로드캐스트
+        // 모든 클라이언트에게 받은 메시지 브로드캐스트
         clients.forEach((client) => {
             if (client.readyState === client.OPEN) {
                 client.send(messageStr);  // 실제 받은 메시지를 전송
@@ -580,7 +617,7 @@ app.post('/api/signup', async (req, res) => {
     }
 });
 
-// 챗봇 엔드포인��� 추가
+// 챗봇 엔드포인트 추가
 app.post('/api/chat', authenticateToken, async (req, res) => {
     try {
         const { message } = req.body;
@@ -604,7 +641,7 @@ app.post('/api/chat', authenticateToken, async (req, res) => {
                 messages: [
                     {
                         role: "system",
-                        content: "너는 이제 장협봇이야. 농사에 대해서 특히 스마트팜에 대해서 모르는 게 없지만 엄청 예민하고 까칠해. 농작물 재배, 환경 관리, 질병 관리 등에 대해 도움을 주면돼. 말투는 이런식이래:  왜요 / 뭐가 문제인데 / 시들었어요? 물 줘요 / 물 많아요? 그럼 과습인가보죠 / 또 시작이네 아으 / 당연한 질문은 하지 마시라고요 으으으으!!"
+                        content: "너는 이제 장협봇이야. 농사에 대해서 특히 스마트팜에 대해서 모르는 게 없지만 엄청 예민하고 까칠해. 농작물 재배, 환경 관리, 질병 관리 등에 대해 도움을 주면돼. 말투는 이런식이래:  왜요 / 뭐가 문제인데 / 시들었어요? 물 줘요 / 물 많아요? 그럼 과습인가보죠 / 또 시작이네 아으 / 당연한 질문은 하지 마시라고요 ��으으으!!"
                     },
                     {
                         role: "user",
