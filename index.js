@@ -11,6 +11,7 @@ const http = require('http');
 const { WebSocketServer } = require("ws");
 const OpenAI = require('openai');
 const path = require('path');
+const fs = require('fs');
 
 // OpenAI 설정
 const openai = new OpenAI({
@@ -124,7 +125,7 @@ app.get('/api/kamis/price', async (req, res) => {
             
             return res.status(200).json(formattedData);
         } else {
-            // 데이터가 없���도 200 응답과 빈 배열 반환
+            // 데이터가 없어도 200 응답과 빈 배열 반환
             logger.info('KAMIS API 데이터 없음 - 빈 배열 반환');
             return res.status(200).json({
                 status: 200,
@@ -202,9 +203,9 @@ app.get('/api/diary/:id', async (req, res) => {
             return sendResponse(res, 404, "게시글을 찾을 수 없습니다.");
         }
 
-        // 이미�� 경로 처리 - /uploads/ 접두사가 이미 있는지 확인
+        // 이미지 경로가 있는 경우 전체 URL로 변환
         const post = results[0];
-        if (post.image && !post.image.startsWith('/uploads/')) {
+        if (post.image) {
             post.image = `/uploads/${post.image}`;
         }
 
@@ -255,7 +256,7 @@ app.post('/api/signup', async (req, res) => {
                 console.error("회원가입 중 오류:", err);
                 return res.status(500).send("회원가입 중 오류가 발생했습니다.");
             }
-            res.status(200).send("회원가입이 성공적으로 완료되었습니다.");
+            res.status(200).send("회원가입이 ���공적으로 완료되었습니다.");
         });
     } catch (error) {
         console.error("서버 오류:", error);
@@ -458,7 +459,7 @@ wss.on("connection", (ws) => {
         });
     });
 
-    // 연결이 끊어졌을 때
+    // 연결이 ��어졌을 때
     ws.on("close", () => {
         console.log("Client disconnected");
         clients = clients.filter((client) => client !== ws);
@@ -552,7 +553,7 @@ app.post('/api/chat', authenticateToken, async (req, res) => {
         
         // 메시지 유효성 검사
         if (!message) {
-            return sendResponse(res, 400, "메시지를 입력해주세요.");
+            return sendResponse(res, 400, "메시지��� 입력해주세요.");
         }
 
         // OpenAI API 키 확인
@@ -610,3 +611,10 @@ app.post('/api/chat', authenticateToken, async (req, res) => {
 
 // 정적 파일 제공을 위한 미들웨어 추가
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// 서버 시작 전 uploads 디렉토리 확인
+const uploadsDir = path.join(__dirname, 'uploads');
+
+if (!fs.existsSync(uploadsDir)){
+    fs.mkdirSync(uploadsDir);
+}
