@@ -35,7 +35,7 @@ const fileFilter = (req, file, cb) => {
     if (file.mimetype.startsWith('image/')) {
         cb(null, true);
     } else {
-        cb(new Error('이미지 파일만 업로드 가능합니다.'), false);
+        cb(new Error('이미��� 파일만 업로드 가능합니다.'), false);
     }
 };
 
@@ -403,7 +403,7 @@ app.get('/api/profile', authenticateToken, async (req, res) => {
             error: error.message, 
             stack: error.stack 
         });
-        return sendResponse(res, 500, "프로필 조회 중 오류��� 발생했습니다.");
+        return sendResponse(res, 500, "프로필 조회 중 오류가 발생했습니다.");
     }
 });
 
@@ -607,15 +607,7 @@ const sendResponse = (res, status, message, data = null) => {
     return res.status(status).json(response);
 };
 
-// 사용 예시
-app.post('/api/signup', async (req, res) => {
-    try {
-        // ... 처리 로직
-        return sendResponse(res, 200, "회원가입이 성공적으로 완료되었습니다.");
-    } catch (error) {
-        return sendResponse(res, 500, "서버 오류가 발생했습니다.");
-    }
-});
+
 
 // 챗봇 엔드포인트 추가
 app.post('/api/chat', authenticateToken, async (req, res) => {
@@ -641,7 +633,7 @@ app.post('/api/chat', authenticateToken, async (req, res) => {
                 messages: [
                     {
                         role: "system",
-                        content: "너는 이제 장협봇이야. 농사에 대해서 특히 스마트팜에 대해서 모르는 게 없지만 엄청 예민하고 까칠해. 농작물 재배, 환경 관리, 질병 관리 등에 대해 도움을 주면돼. 말투는 이런식이래:  왜요 / 뭐가 문제인데 / 시들었어요? 물 줘요 / 물 많아요? 그럼 과습인가보죠 / 또 시작이네 아으 / 당연한 질문은 하지 마시라고요 ��으으으!!"
+                        content: "너는 이제 장협봇이야. 농사에 대해서 특히 스마트팜에 대해서 모르는 게 없지만 엄청 예민하고 까칠해. 농작물 재배, 환경 관리, 질병 관리 등에 대해 도움을 주면돼. 말투는 이런식이래:  왜요 / 뭐가 문제인데 / 시들었어요? 물 줘요 / 물 많아요? 그럼 과습인가보죠 / 또 시작이네 아으 / 당연한 질문은 하지 마시라고요 으으으!!"
                     },
                     {
                         role: "user",
@@ -682,3 +674,92 @@ app.post('/api/chat', authenticateToken, async (req, res) => {
 
 // 정적 파일 제공을 위한 미들웨어 추가
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// 작물 게시글 추가 엔드포인트
+app.post('/api/crop-post', authenticateToken, upload.single('post_img'), async (req, res) => {
+    try {
+        const { crop_id, post_text } = req.body;
+        const user_id = req.user.userId;
+
+        // 입력값 검증
+        if (!crop_id || !post_text) {
+            return res.status(400).json({
+                status: 400,
+                message: "필수 필드를 모두 입력해주세요. (작물 ID, 게시글 내용)",
+                data: null
+            });
+        }
+
+        // 작물 ID 유효성 검증
+        const cropCheckQuery = `
+            SELECT id FROM my_crop 
+            WHERE id = ? AND user_id = ?
+        `;
+        const cropCheck = await executeQuery(cropCheckQuery, [crop_id, user_id]);
+        
+        if (cropCheck.length === 0) {
+            // 업로드된 파일이 있다면 삭제
+            if (req.file) {
+                fs.unlink(req.file.path, (err) => {
+                    if (err) logger.error('파일 삭제 실패:', err);
+                });
+            }
+            return res.status(404).json({
+                status: 404,
+                message: "유효하지 않은 작물 ID입니다.",
+                data: null
+            });
+        }
+
+        // 이미지 파일 처리
+        let imageUrl = null;
+        if (req.file) {
+            imageUrl = `/uploads/${req.file.filename}`;  // DB에 저장될 URL 경로
+            logger.info('이미지 업로드 성공:', imageUrl);
+        }
+
+        // 게시글 저장
+        const query = `
+            INSERT INTO crop_post 
+            (user_id, crop_id, post_img, post_text, created_at)
+            VALUES (?, ?, ?, ?, NOW())
+        `;
+
+        const result = await executeQuery(query, [
+            user_id,
+            crop_id,
+            imageUrl,  // URL 경로 저장
+            post_text
+        ]);
+
+        logger.info('작물 게시글 추가 성공:', result);
+
+        return res.status(200).json({
+            status: 200,
+            message: "게시글이 성공적으로 추가되었습니다.",
+            data: {
+                id: result.insertId,
+                user_id,
+                crop_id,
+                post_img: imageUrl,  // 전체 URL 경로 반환
+                post_text,
+                created_at: new Date()
+            }
+        });
+
+    } catch (error) {
+        // 에러 발생 시 업로드된 파일 삭제
+        if (req.file) {
+            fs.unlink(req.file.path, (err) => {
+                if (err) logger.error('파일 삭제 실패:', err);
+            });
+        }
+
+        logger.error('게시글 추가 중 오류 발생:', error);
+        return res.status(500).json({
+            status: 500,
+            message: "게시글 추가 중 오류가 발생했습니다.",
+            data: null
+        });
+    }
+});
