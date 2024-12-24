@@ -35,7 +35,7 @@ const fileFilter = (req, file, cb) => {
     if (file.mimetype.startsWith('image/')) {
         cb(null, true);
     } else {
-        cb(new Error('이미지 파일만 업로드 가능합니다.'), false);
+        cb(new Error('이미��� 파일만 업로드 가능합니다.'), false);
     }
 };
 
@@ -247,7 +247,7 @@ app.get('/api/diary/:id', async (req, res) => {
         return sendResponse(res, 200, "게시글 조회 성공", post);
     } catch (err) {
         logger.error('게시글 조회 중 오류 발생:', err);
-        return sendResponse(res, 500, "게시글 조회 중 오류가 발생했습니다.");
+        return sendResponse(res, 500, "게시글 조��� 중 오류가 발생했습니다.");
     }
 });
 
@@ -288,7 +288,7 @@ app.post('/api/signup', async (req, res) => {
             created_at
         ], (err, result) => {
             if (err) {
-                console.error("회원가입 중 오류:", err);
+                console.error("회원가입 중 ��류:", err);
                 return res.status(500).send("회원가입 중 오류가 발생했습니다.");
             }
             res.status(200).send("회원가입이 성공적으로 완료되었습니다.");
@@ -323,7 +323,7 @@ app.post('/api/login', async (req, res) => {
         // 비밀번호 검증
         const isValidPassword = await bcrypt.compare(password, user.password_hash);
         if (!isValidPassword) {
-            logger.info(`로그인 실패: 잘못된 비밀번호 - ${email_adress}`);
+            logger.info(`��그인 실패: 잘못된 비밀번호 - ${email_adress}`);
             return sendResponse(res, 401, "이메일 또는 비밀번호가 올바르지 않습니다.");
         }
 
@@ -661,7 +661,7 @@ app.post('/api/chat', authenticateToken, async (req, res) => {
                 error: openaiError.message, 
                 stack: openaiError.stack 
             });
-            return sendResponse(res, 500, "AI 응답 생성 중 오류가 발생했습니다.");
+            return sendResponse(res, 500, "AI 응답 ���성 중 오류가 발생했습니다.");
         }
 
     } catch (error) {
@@ -765,15 +765,21 @@ app.post('/api/crop-post', authenticateToken, upload.single('post_img'), async (
     }
 });
 
-// GET /api/my-crop - 사용자의 모든 작물 조회
-app.get('/api/my-crop', authenticateToken, async (req, res) => {
+// GET /api/mycrop - 사용자의 모든 작물 조회 (URL 경로 수정)
+app.get('/api/mycrop', authenticateToken, async (req, res) => {
     try {
-        const user_id = req.user.userId;  // JWT 토큰에서 사용자 ID 추출
+        const user_id = req.user.userId;
 
         const query = `
-            SELECT id, user_id, species, nickname, 
-                   planted_at, harvest_at, 
-                   created_at, updated_at
+            SELECT 
+                id,
+                user_id,
+                species,  
+                nickname,
+                planted_at,  
+                harvest_at,
+                created_at,
+                updated_at
             FROM SFMARK1.my_crop 
             WHERE user_id = ? 
             AND is_deleted = false 
@@ -782,29 +788,26 @@ app.get('/api/my-crop', authenticateToken, async (req, res) => {
 
         const results = await executeQuery(query, [user_id]);
 
-        // 날짜 형식 변환
+        // 날짜 형식 변환 및 필드명 매칭
         const formattedResults = results.map(crop => ({
-            ...crop,
-            seeding_date: crop.seeding_date ? crop.seeding_date.toISOString().split('T')[0] : null,
-            harvesting_date: crop.harvesting_date ? crop.harvesting_date.toISOString().split('T')[0] : null,
-            created_at: crop.created_at.toISOString(),
-            updated_at: crop.updated_at.toISOString()
+            id: crop.id,
+            species: crop.species,
+            nickname: crop.nickname,
+            planted_at: crop.planted_at,
+            harvest_at: crop.harvesting_date,
+            created_at: crop.created_at,
+            image_url: null  // 프론트엔드에서 사용하는 필드 추가
         }));
 
         logger.info(`사용자 ${user_id}의 작물 목록 조회 성공`);
 
-        return res.status(200).json({
-            status: 200,
-            message: "작물 목록 조회 성공",
-            data: formattedResults
-        });
+        // 프론트엔드 예상 응답 구조로 변경
+        return res.status(200).json(formattedResults);
 
     } catch (error) {
         logger.error('작물 목록 조회 중 오류 발생:', error);
         return res.status(500).json({
-            status: 500,
-            message: "작물 목록 조회 중 오류가 발생했습니다.",
-            data: null
+            message: "작물 목록 조회 중 오류가 발생했습니다."
         });
     }
 });
