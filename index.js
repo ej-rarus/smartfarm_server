@@ -771,8 +771,8 @@ app.get('/api/my-crop', authenticateToken, async (req, res) => {
         const user_id = req.user.userId;  // JWT 토큰에서 사용자 ID 추출
 
         const query = `
-            SELECT id, user_id, kind, nickname, 
-                   seeding_date, harvesting_date, 
+            SELECT id, user_id, species, nickname, 
+                   planted_at, harvest_at, 
                    created_at, updated_at
             FROM SFMARK1.my_crop 
             WHERE user_id = ? 
