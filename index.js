@@ -35,7 +35,7 @@ const fileFilter = (req, file, cb) => {
     if (file.mimetype.startsWith('image/')) {
         cb(null, true);
     } else {
-        cb(new Error('이미��� 파일만 업로드 가능합니다.'), false);
+        cb(new Error('이미지 파일만 업로드 가능합니다.'), false);
     }
 };
 
@@ -52,6 +52,7 @@ const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
 
+// 2. 앱 초기화 및 미들웨어 설정
 const app = express();
 app.use(express.json());
 app.use(cors({
@@ -759,6 +760,50 @@ app.post('/api/crop-post', authenticateToken, upload.single('post_img'), async (
         return res.status(500).json({
             status: 500,
             message: "게시글 추가 중 오류가 발생했습니다.",
+            data: null
+        });
+    }
+});
+
+// GET /api/my-crop - 사용자의 모든 작물 조회
+app.get('/api/my-crop', authenticateToken, async (req, res) => {
+    try {
+        const user_id = req.user.userId;  // JWT 토큰에서 사용자 ID 추출
+
+        const query = `
+            SELECT id, user_id, kind, nickname, 
+                   seeding_date, harvesting_date, 
+                   created_at, updated_at
+            FROM SFMARK1.my_crop 
+            WHERE user_id = ? 
+            AND is_deleted = false 
+            ORDER BY created_at DESC
+        `;
+
+        const results = await executeQuery(query, [user_id]);
+
+        // 날짜 형식 변환
+        const formattedResults = results.map(crop => ({
+            ...crop,
+            seeding_date: crop.seeding_date ? crop.seeding_date.toISOString().split('T')[0] : null,
+            harvesting_date: crop.harvesting_date ? crop.harvesting_date.toISOString().split('T')[0] : null,
+            created_at: crop.created_at.toISOString(),
+            updated_at: crop.updated_at.toISOString()
+        }));
+
+        logger.info(`사용자 ${user_id}의 작물 목록 조회 성공`);
+
+        return res.status(200).json({
+            status: 200,
+            message: "작물 목록 조회 성공",
+            data: formattedResults
+        });
+
+    } catch (error) {
+        logger.error('작물 목록 조회 중 오류 발생:', error);
+        return res.status(500).json({
+            status: 500,
+            message: "작물 목록 조회 중 오류가 발생했습니다.",
             data: null
         });
     }
