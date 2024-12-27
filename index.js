@@ -765,7 +765,7 @@ app.post('/api/crop-post', authenticateToken, upload.single('post_img'), async (
     }
 });
 
-// GET /api/mycrop - 사용자의 모든 작물 조회 (URL 경로 수정)
+// GET /api/mycrop - 사용자의 모든 작물 조회
 app.get('/api/mycrop', authenticateToken, async (req, res) => {
     try {
         const user_id = req.user.userId;
@@ -777,7 +777,7 @@ app.get('/api/mycrop', authenticateToken, async (req, res) => {
                 species,  
                 nickname,
                 planted_at,  
-                harvest_at,
+                harvest_at,  // harvesting_date가 아닌 harvest_at 사용
                 created_at,
                 updated_at
             FROM SFMARK1.my_crop 
@@ -788,20 +788,18 @@ app.get('/api/mycrop', authenticateToken, async (req, res) => {
 
         const results = await executeQuery(query, [user_id]);
 
-        // 날짜 형식 변환 및 필드명 매칭
+        // 날짜 형식 변환 및 필드명 매핑
         const formattedResults = results.map(crop => ({
             id: crop.id,
             species: crop.species,
             nickname: crop.nickname,
             planted_at: crop.planted_at,
-            harvest_at: crop.harvesting_date,
+            harvest_at: crop.harvest_at,  // harvesting_date가 아닌 harvest_at 사용
             created_at: crop.created_at,
-            image_url: null  // 프론트엔드에서 사용하는 필드 추가
+            image_url: null
         }));
 
         logger.info(`사용자 ${user_id}의 작물 목록 조회 성공`);
-
-        // 프론트엔드 예상 응답 구조로 변경
         return res.status(200).json(formattedResults);
 
     } catch (error) {
