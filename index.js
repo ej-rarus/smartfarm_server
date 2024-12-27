@@ -777,7 +777,7 @@ app.get('/api/mycrop', authenticateToken, async (req, res) => {
                 species,  
                 nickname,
                 planted_at,  
-                harvest_at,  // harvesting_date가 아닌 harvest_at 사용
+                harvest_at,
                 created_at,
                 updated_at
             FROM SFMARK1.my_crop 
@@ -794,7 +794,7 @@ app.get('/api/mycrop', authenticateToken, async (req, res) => {
             species: crop.species,
             nickname: crop.nickname,
             planted_at: crop.planted_at,
-            harvest_at: crop.harvest_at,  // harvesting_date가 아닌 harvest_at 사용
+            harvest_at: crop.harvest_at,  
             created_at: crop.created_at,
             image_url: null
         }));
