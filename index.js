@@ -35,7 +35,7 @@ const fileFilter = (req, file, cb) => {
     if (file.mimetype.startsWith('image/')) {
         cb(null, true);
     } else {
-        cb(new Error('이미��� 파일만 업로드 가능합니다.'), false);
+        cb(new Error('이미지 파일만 업로드 가능합니다.'), false);
     }
 };
 
@@ -247,7 +247,7 @@ app.get('/api/diary/:id', async (req, res) => {
         return sendResponse(res, 200, "게시글 조회 성공", post);
     } catch (err) {
         logger.error('게시글 조회 중 오류 발생:', err);
-        return sendResponse(res, 500, "게시글 조��� 중 오류가 발생했습니다.");
+        return sendResponse(res, 500, "게시글 조회 중 오류가 발생했습니다.");
     }
 });
 
@@ -288,7 +288,7 @@ app.post('/api/signup', async (req, res) => {
             created_at
         ], (err, result) => {
             if (err) {
-                console.error("회원가입 중 ��류:", err);
+                console.error("회원가입 중 오류:", err);
                 return res.status(500).send("회원가입 중 오류가 발생했습니다.");
             }
             res.status(200).send("회원가입이 성공적으로 완료되었습니다.");
@@ -323,7 +323,7 @@ app.post('/api/login', async (req, res) => {
         // 비밀번호 검증
         const isValidPassword = await bcrypt.compare(password, user.password_hash);
         if (!isValidPassword) {
-            logger.info(`��그인 실패: 잘못된 비밀번호 - ${email_adress}`);
+            logger.info(`로그인 실패: 잘못된 비밀번호 - ${email_adress}`);
             return sendResponse(res, 401, "이메일 또는 비밀번호가 올바르지 않습니다.");
         }
 
@@ -365,7 +365,7 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-// JWT 검증 미들웨어 (보호된 라우트에서 사용)
+// JWT 검증 미들웨어 (보��된 라우트에서 사용)
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -531,7 +531,7 @@ wss.on("connection", (ws) => {
         });
     });
 
-    // 연결이 끊어졌을 때
+    // 연결이 끊어���을 때
     ws.on("close", () => {
         console.log("Client disconnected");
         clients = clients.filter((client) => client !== ws);
@@ -626,7 +626,7 @@ app.post('/api/chat', authenticateToken, async (req, res) => {
             return sendResponse(res, 500, "서버 설정 오류가 발생했습니다.");
         }
 
-        logger.info('챗봇 요청:', { message });
+        logger.info('��봇 요청:', { message });
 
         try {
             const completion = await openai.chat.completions.create({
@@ -661,7 +661,7 @@ app.post('/api/chat', authenticateToken, async (req, res) => {
                 error: openaiError.message, 
                 stack: openaiError.stack 
             });
-            return sendResponse(res, 500, "AI 응답 ���성 중 오류가 발생했습니다.");
+            return sendResponse(res, 500, "AI 응답 중 오류가 발생했습니다.");
         }
 
     } catch (error) {
@@ -806,6 +806,79 @@ app.get('/api/mycrop', authenticateToken, async (req, res) => {
         logger.error('작물 목록 조회 중 오류 발생:', error);
         return res.status(500).json({
             message: "작물 목록 조회 중 오류가 발생했습니다."
+        });
+    }
+});
+
+// GET /api/mycrop/:crop_id/posts - 특정 작물의 모든 게시글 조회
+app.get('/api/mycrop/:crop_id/posts', authenticateToken, async (req, res) => {
+    try {
+        const user_id = req.user.userId;
+        const crop_id = req.params.crop_id;
+
+        // 먼저 해당 작물이 현재 사용자의 것인지 확인
+        const cropCheckQuery = `
+            SELECT id FROM SFMARK1.my_crop 
+            WHERE id = ? AND user_id = ? AND is_deleted = false
+        `;
+        const cropCheck = await executeQuery(cropCheckQuery, [crop_id, user_id]);
+
+        if (cropCheck.length === 0) {
+            return res.status(404).json({
+                status: 404,
+                message: "해당 작물을 찾을 수 없습니다.",
+                data: null
+            });
+        }
+
+        // 해당 작물의 게시글들 조회
+        const query = `
+            SELECT 
+                cp.id,
+                cp.user_id,
+                cp.crop_id,
+                cp.post_img,
+                cp.post_text,
+                cp.created_at,
+                cp.updated_at,
+                mc.nickname as crop_nickname,
+                mc.kind as crop_kind
+            FROM SFMARK1.crop_post cp
+            JOIN SFMARK1.my_crop mc ON cp.crop_id = mc.id
+            WHERE cp.crop_id = ? 
+            AND cp.is_deleted = false
+            ORDER BY cp.created_at DESC
+        `;
+
+        const posts = await executeQuery(query, [crop_id]);
+
+        // 이미지 URL 및 날짜 형식 처리
+        const formattedPosts = posts.map(post => ({
+            id: post.id,
+            user_id: post.user_id,
+            crop_id: post.crop_id,
+            post_img: post.post_img,  // 이미 /uploads/를 포함한 경로
+            post_text: post.post_text,
+            created_at: post.created_at,
+            updated_at: post.updated_at,
+            crop_nickname: post.crop_nickname,
+            crop_kind: post.crop_kind
+        }));
+
+        logger.info(`작물 ${crop_id}의 게시글 목록 조회 성공`);
+
+        return res.status(200).json({
+            status: 200,
+            message: "게시글 목록 조회 성공",
+            data: formattedPosts
+        });
+
+    } catch (error) {
+        logger.error('게시글 목록 조회 중 오류 발생:', error);
+        return res.status(500).json({
+            status: 500,
+            message: "게시글 목록 조회 중 오류가 발생했습니다.",
+            data: null
         });
     }
 });
