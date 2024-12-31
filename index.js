@@ -365,7 +365,7 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-// JWT 검증 미들웨어 (보��된 라우트에서 사용)
+// JWT 검증 미들웨어 (보호된 라우트에서 사용)
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -531,7 +531,7 @@ wss.on("connection", (ws) => {
         });
     });
 
-    // 연결이 끊어���을 때
+    // 연결이 끊어질 때
     ws.on("close", () => {
         console.log("Client disconnected");
         clients = clients.filter((client) => client !== ws);
@@ -626,7 +626,7 @@ app.post('/api/chat', authenticateToken, async (req, res) => {
             return sendResponse(res, 500, "서버 설정 오류가 발생했습니다.");
         }
 
-        logger.info('��봇 요청:', { message });
+        logger.info('챗봇 요청:', { message });
 
         try {
             const completion = await openai.chat.completions.create({
@@ -878,6 +878,80 @@ app.get('/api/mycrop/:crop_id/posts', authenticateToken, async (req, res) => {
         return res.status(500).json({
             status: 500,
             message: "게시글 목록 조회 중 오류가 발생했습니다.",
+            data: null
+        });
+    }
+});
+
+// POST /api/mycrop - 새로운 작물 추가
+app.post('/api/mycrop', authenticateToken, async (req, res) => {
+    try {
+        const { species, nickname, planted_at, harvest_at } = req.body;
+        const user_id = req.user.userId;  // JWT 토큰에서 사용자 ID 추출
+
+        // 필수 필드 검증
+        if (!species || !nickname || !planted_at) {
+            return res.status(400).json({
+                status: 400,
+                message: "필수 필드를 모두 입력해주세요. (작물 종류, 별명, 심은 날짜)",
+                data: null
+            });
+        }
+
+        // 날짜 형식 검증 (YYYY-MM-DD)
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!dateRegex.test(planted_at) || (harvest_at && !dateRegex.test(harvest_at))) {
+            return res.status(400).json({
+                status: 400,
+                message: "날짜는 YYYY-MM-DD 형식이어야 합니다.",
+                data: null
+            });
+        }
+
+        // 새 작물 추가
+        const query = `
+            INSERT INTO SFMARK1.my_crop 
+            (user_id, species, nickname, planted_at, harvest_at, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, NOW(), NOW())
+        `;
+
+        const result = await executeQuery(query, [
+            user_id,
+            species,
+            nickname,
+            planted_at,
+            harvest_at || null
+        ]);
+
+        logger.info('새로운 작물 추가 성공:', result);
+
+        // 추가된 작물 정보 조회
+        const newCrop = await executeQuery(
+            'SELECT * FROM SFMARK1.my_crop WHERE id = ?',
+            [result.insertId]
+        );
+
+        return res.status(201).json({
+            status: 201,
+            message: "작물이 성공적으로 추가되었습니다.",
+            data: {
+                id: result.insertId,
+                user_id,
+                species,
+                nickname,
+                planted_at,
+                harvest_at: harvest_at || null,
+                created_at: new Date(),
+                updated_at: new Date(),
+                is_deleted: false
+            }
+        });
+
+    } catch (error) {
+        logger.error('작물 추가 중 오류 발생:', error);
+        return res.status(500).json({
+            status: 500,
+            message: "작물 추가 중 오류가 발생했습니다.",
             data: null
         });
     }
