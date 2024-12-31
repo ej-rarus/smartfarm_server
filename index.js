@@ -943,7 +943,6 @@ app.post('/api/mycrop', authenticateToken, async (req, res) => {
                 harvest_at: harvest_at || null,
                 created_at: new Date(),
                 updated_at: new Date(),
-                is_deleted: false
             }
         });
 
