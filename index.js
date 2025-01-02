@@ -1120,31 +1120,25 @@ app.get('/api/crop-post/:id', authenticateToken, async (req, res) => {
         const postId = req.params.id;
         const userId = req.user.userId;
 
-        console.log('요청 받은 파라미터:', { postId, userId }); // 디버깅용 로그 추가
-
-        // 쿼리 수정 - 테이블명에 스키마 추가
+        // 쿼리 단순화
         const query = `
             SELECT 
                 cp.*,
                 u.username,
                 u.profile_image as user_profile_image,
-                mc.species as crop_kind,  /* kind를 species로 수정 */
-                mc.nickname as crop_nickname,
-                COALESCE(l.likes, 0) as likes,
-                (SELECT COUNT(*) FROM SFMARK1.comments c 
-                 WHERE c.post_id = cp.id AND c.is_deleted = false) as comments
+                mc.species as crop_kind,
+                mc.nickname as crop_nickname
             FROM SFMARK1.crop_post cp
-            JOIN SFMARK1.user u ON cp.user_id = u.id
-            JOIN SFMARK1.my_crop mc ON cp.crop_id = mc.id
-            LEFT JOIN SFMARK1.likes l ON cp.likes_id = l.id
+            LEFT JOIN SFMARK1.user u ON cp.user_id = u.id
+            LEFT JOIN SFMARK1.my_crop mc ON cp.crop_id = mc.id
             WHERE cp.id = ? AND cp.is_deleted = false
         `;
 
-        console.log('실행할 쿼리:', query); // 디버깅용 로그 추가
+        console.log('실행할 쿼리:', query);
         console.log('쿼리 파라미터:', [postId]);
 
         const result = await executeQuery(query, [postId]);
-        console.log('쿼리 결과:', result); // 디버깅용 로그 추가
+        console.log('쿼리 결과:', result);
 
         if (result.length === 0) {
             return res.status(404).json({
@@ -1154,7 +1148,6 @@ app.get('/api/crop-post/:id', authenticateToken, async (req, res) => {
             });
         }
 
-        // 응답 데이터 구성
         const post = {
             ...result[0],
             is_owner: result[0].user_id === userId
@@ -1167,13 +1160,11 @@ app.get('/api/crop-post/:id', authenticateToken, async (req, res) => {
         });
 
     } catch (error) {
-        // 더 자세한 에러 정보 로깅
         console.error('상세 에러 정보:', {
             message: error.message,
             stack: error.stack,
             code: error.code,
-            sqlMessage: error.sqlMessage,
-            sqlState: error.sqlState
+            sqlMessage: error.sqlMessage
         });
 
         return res.status(500).json({
