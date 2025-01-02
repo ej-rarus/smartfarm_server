@@ -1113,3 +1113,95 @@ app.use((err, req, res, next) => {
     }
     next(err);
 });
+
+// GET /api/crop-post/:id - 특정 게시글 상세 정보 조회
+app.get('/api/crop-post/:id', authenticateToken, async (req, res) => {
+    try {
+        const postId = req.params.id;
+        const userId = req.user.userId;
+
+        // postId 유효성 검사
+        if (!postId || isNaN(postId)) {
+            return res.status(400).json({
+                status: 400,
+                message: "유효하지 않은 게시글 ID입니다.",
+                data: null
+            });
+        }
+
+        const query = `
+            SELECT 
+                cp.id,
+                cp.user_id,
+                cp.crop_id,
+                cp.post_img,
+                cp.post_text,
+                cp.created_at,
+                cp.updated_at,
+                cp.likes_id,
+                u.username,
+                u.profile_image as user_profile_image,
+                mc.nickname as crop_nickname,
+                mc.kind as crop_kind,
+                COALESCE(l.likes, 0) as likes,
+                (SELECT COUNT(*) FROM SFMARK1.comments WHERE post_id = cp.id AND is_deleted = false) as comments_count,
+                (cp.user_id = ?) as is_owner
+            FROM SFMARK1.crop_post cp
+            JOIN SFMARK1.user u ON cp.user_id = u.id
+            JOIN SFMARK1.my_crop mc ON cp.crop_id = mc.id
+            LEFT JOIN SFMARK1.likes l ON cp.likes_id = l.id
+            WHERE cp.id = ? AND cp.is_deleted = false
+        `;
+
+        logger.info(`게시글 ${postId} 조회 시작`);
+        const posts = await executeQuery(query, [userId, postId]);
+
+        if (posts.length === 0) {
+            return res.status(404).json({
+                status: 404,
+                message: "게시글을 찾을 수 없습니다.",
+                data: null
+            });
+        }
+
+        // 날짜 형식 변환 및 이미지 URL 처리
+        const post = {
+            ...posts[0],
+            created_at: posts[0].created_at instanceof Date 
+                ? posts[0].created_at.toISOString() 
+                : posts[0].created_at,
+            updated_at: posts[0].updated_at instanceof Date 
+                ? posts[0].updated_at.toISOString() 
+                : posts[0].updated_at,
+            post_img: posts[0].post_img || null,
+            user_profile_image: posts[0].user_profile_image || null,
+            is_owner: Boolean(posts[0].is_owner)
+        };
+
+        logger.info(`게시글 ${postId} 조회 성공`);
+
+        return res.status(200).json({
+            status: 200,
+            message: "게시글 조회 성공",
+            data: post
+        });
+
+    } catch (error) {
+        logger.error('게시글 조회 중 오류:', error);
+        
+        // 더 자세한 에러 정보 로깅
+        if (error.sql) {
+            logger.error('SQL 에러:', {
+                sql: error.sql,
+                sqlMessage: error.sqlMessage,
+                sqlState: error.sqlState
+            });
+        }
+
+        return res.status(500).json({
+            status: 500,
+            message: "게시글 조회 중 오류가 발생했습니다.",
+            data: null
+        });
+    }
+});
