@@ -1120,41 +1120,26 @@ app.get('/api/crop-post/:id', authenticateToken, async (req, res) => {
         const postId = req.params.id;
         const userId = req.user.userId;
 
-        // postId 유효성 검사
-        if (!postId || isNaN(postId)) {
-            return res.status(400).json({
-                status: 400,
-                message: "유효하지 않은 게시글 ID입니다.",
-                data: null
-            });
-        }
+        logger.info('요청 파라미터:', { postId, userId });
 
-        const query = `
+        // 1단계: 먼저 게시글 기본 정보만 조회
+        const basicQuery = `
             SELECT 
-                cp.id,
-                cp.user_id,
-                cp.crop_id,
-                cp.post_img,
-                cp.post_text,
-                cp.created_at,
-                cp.updated_at,
-                cp.likes_id,
-                u.username,
-                u.profile_image as user_profile_image,
-                mc.nickname as crop_nickname,
-                mc.kind as crop_kind,
-                COALESCE(l.likes, 0) as likes,
-                (SELECT COUNT(*) FROM SFMARK1.comments WHERE post_id = cp.id AND is_deleted = false) as comments_count,
-                (cp.user_id = ?) as is_owner
-            FROM SFMARK1.crop_post cp
-            JOIN SFMARK1.user u ON cp.user_id = u.id
-            JOIN SFMARK1.my_crop mc ON cp.crop_id = mc.id
-            LEFT JOIN SFMARK1.likes l ON cp.likes_id = l.id
-            WHERE cp.id = ? AND cp.is_deleted = false
+                id,
+                user_id,
+                crop_id,
+                post_img,
+                post_text,
+                created_at,
+                updated_at,
+                likes_id,
+                is_deleted
+            FROM SFMARK1.crop_post
+            WHERE id = ? AND is_deleted = false
         `;
 
-        logger.info(`게시글 ${postId} 조회 시작`);
-        const posts = await executeQuery(query, [userId, postId]);
+        const posts = await executeQuery(basicQuery, [postId]);
+        logger.info('기본 쿼리 결과:', posts);
 
         if (posts.length === 0) {
             return res.status(404).json({
@@ -1164,21 +1149,45 @@ app.get('/api/crop-post/:id', authenticateToken, async (req, res) => {
             });
         }
 
-        // 날짜 형식 변환 및 이미지 URL 처리
+        // 2단계: 추가 정보 조회
+        const detailQuery = `
+            SELECT 
+                u.username,
+                u.profile_image,
+                mc.nickname as crop_nickname,
+                COALESCE(l.likes, 0) as likes
+            FROM SFMARK1.user u
+            JOIN SFMARK1.my_crop mc ON mc.id = ?
+            LEFT JOIN SFMARK1.likes l ON l.id = ?
+            WHERE u.id = ?
+        `;
+
+        const details = await executeQuery(detailQuery, [
+            posts[0].crop_id,
+            posts[0].likes_id,
+            posts[0].user_id
+        ]);
+        logger.info('상세 쿼리 결과:', details);
+
+        // 3단계: 댓글 수 조회
+        const commentQuery = `
+            SELECT COUNT(*) as comment_count
+            FROM SFMARK1.comments
+            WHERE post_id = ? AND is_deleted = false
+        `;
+
+        const comments = await executeQuery(commentQuery, [postId]);
+        logger.info('댓글 쿼리 결과:', comments);
+
+        // 결과 조합
         const post = {
             ...posts[0],
-            created_at: posts[0].created_at instanceof Date 
-                ? posts[0].created_at.toISOString() 
-                : posts[0].created_at,
-            updated_at: posts[0].updated_at instanceof Date 
-                ? posts[0].updated_at.toISOString() 
-                : posts[0].updated_at,
-            post_img: posts[0].post_img || null,
-            user_profile_image: posts[0].user_profile_image || null,
-            is_owner: Boolean(posts[0].is_owner)
+            ...details[0],
+            comments: comments[0].comment_count,
+            is_owner: posts[0].user_id === userId
         };
 
-        logger.info(`게시글 ${postId} 조회 성공`);
+        logger.info('최종 응답 데이터:', post);
 
         return res.status(200).json({
             status: 200,
@@ -1187,21 +1196,18 @@ app.get('/api/crop-post/:id', authenticateToken, async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('게시글 조회 중 오류:', error);
-        
-        // 더 자세한 에러 정보 로깅
-        if (error.sql) {
-            logger.error('SQL 에러:', {
-                sql: error.sql,
-                sqlMessage: error.sqlMessage,
-                sqlState: error.sqlState
-            });
-        }
+        logger.error('게시글 조회 중 오류:', {
+            message: error.message,
+            stack: error.stack,
+            sql: error.sql,
+            sqlMessage: error.sqlMessage,
+            sqlState: error.sqlState
+        });
 
         return res.status(500).json({
             status: 500,
             message: "게시글 조회 중 오류가 발생했습니다.",
-            data: null
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 });
