@@ -56,15 +56,26 @@ const openai = new OpenAI({
 const app = express();
 app.use(express.json());
 app.use(cors({
-    origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    credentials: true
+    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://3.39.126.121:3000'],  // 허용할 출처 명시
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],  // OPTIONS 메서드 추가
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+    exposedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // Helmet 미들웨어 추가
 app.use(helmet({
-    contentSecurityPolicy: false,  // CSP를 비활성화하거나
-    crossOriginEmbedderPolicy: false
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginEmbedderPolicy: false,
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            imgSrc: ["'self'", "data:", "blob:", "*"],
+            connectSrc: ["'self'", "*"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+        }
+    }
 }));
 
 // 요청 로깅 미들웨어
@@ -674,7 +685,15 @@ app.post('/api/chat', authenticateToken, async (req, res) => {
 });
 
 // 정적 파일 제공을 위한 미들웨어 추가
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', (req, res, next) => {
+    res.set({
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Cross-Origin-Resource-Policy': 'cross-origin'
+    });
+    next();
+}, express.static(path.join(__dirname, 'uploads')));
 
 // 작물 게시글 추가 엔드포인트
 app.post('/api/crop-post', authenticateToken, upload.single('post_img'), async (req, res) => {
@@ -1077,4 +1096,20 @@ app.post('/api/mycrop/:crop_id/posts', authenticateToken, upload.single('post_im
             data: null
         });
     }
+});
+
+// OPTIONS 요청에 대한 사전 처리
+app.options('*', cors());
+
+// 전역 CORS 에러 핸들링 미들웨어
+app.use((err, req, res, next) => {
+    if (err.name === 'CORSError') {
+        logger.error('CORS Error:', err);
+        return res.status(403).json({
+            status: 403,
+            message: "CORS policy violation",
+            data: null
+        });
+    }
+    next(err);
 });
