@@ -56,26 +56,15 @@ const openai = new OpenAI({
 const app = express();
 app.use(express.json());
 app.use(cors({
-    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://3.39.126.121:3000'],  // 허용할 출처 명시
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],  // OPTIONS 메서드 추가
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true,
-    exposedHeaders: ['Content-Type', 'Authorization']
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    credentials: true
 }));
 
 // Helmet 미들웨어 추가
 app.use(helmet({
-    crossOriginResourcePolicy: { policy: "cross-origin" },
-    crossOriginEmbedderPolicy: false,
-    contentSecurityPolicy: {
-        directives: {
-            defaultSrc: ["'self'"],
-            imgSrc: ["'self'", "data:", "blob:", "*"],
-            connectSrc: ["'self'", "*"],
-            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-            styleSrc: ["'self'", "'unsafe-inline'"],
-        }
-    }
+    contentSecurityPolicy: false,  // CSP를 비활성화하거나
+    crossOriginEmbedderPolicy: false
 }));
 
 // 요청 로깅 미들웨어
@@ -685,15 +674,7 @@ app.post('/api/chat', authenticateToken, async (req, res) => {
 });
 
 // 정적 파일 제공을 위한 미들웨어 추가
-app.use('/uploads', (req, res, next) => {
-    res.set({
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        'Cross-Origin-Resource-Policy': 'cross-origin'
-    });
-    next();
-}, express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // 작물 게시글 추가 엔드포인트
 app.post('/api/crop-post', authenticateToken, upload.single('post_img'), async (req, res) => {
@@ -1093,220 +1074,6 @@ app.post('/api/mycrop/:crop_id/posts', authenticateToken, upload.single('post_im
         return res.status(500).json({
             status: 500,
             message: "게시글 추가 중 오류가 발생했습니다.",
-            data: null
-        });
-    }
-});
-
-// OPTIONS 요청에 대한 사전 처리
-app.options('*', cors());
-
-// 전역 CORS 에러 핸들링 미들웨어
-app.use((err, req, res, next) => {
-    if (err.name === 'CORSError') {
-        logger.error('CORS Error:', err);
-        return res.status(403).json({
-            status: 403,
-            message: "CORS policy violation",
-            data: null
-        });
-    }
-    next(err);
-});
-
-// GET /api/crop-post/:id - 특정 게시글 상세 정보 조회
-app.get('/api/crop-post/:id', authenticateToken, async (req, res) => {
-    try {
-        const postId = req.params.id;
-        const userId = req.user.userId;
-
-        // 쿼리 단순화
-        const query = `
-            SELECT 
-                cp.*,
-                u.username,
-                u.profile_image as user_profile_image,
-                mc.species as crop_kind,
-                mc.nickname as crop_nickname
-            FROM SFMARK1.crop_post cp
-            LEFT JOIN SFMARK1.user u ON cp.user_id = u.id
-            LEFT JOIN SFMARK1.my_crop mc ON cp.crop_id = mc.id
-            WHERE cp.id = ? AND cp.is_deleted = false
-        `;
-
-        console.log('실행할 쿼리:', query);
-        console.log('쿼리 파라미터:', [postId]);
-
-        const result = await executeQuery(query, [postId]);
-        console.log('쿼리 결과:', result);
-
-        if (result.length === 0) {
-            return res.status(404).json({
-                status: 404,
-                message: "게시글을 찾을 수 없습니다.",
-                data: null
-            });
-        }
-
-        const post = {
-            ...result[0],
-            is_owner: result[0].user_id === userId
-        };
-
-        return res.status(200).json({
-            status: 200,
-            message: "게시글 조회 성공",
-            data: post
-        });
-
-    } catch (error) {
-        console.error('상세 에러 정보:', {
-            message: error.message,
-            stack: error.stack,
-            code: error.code,
-            sqlMessage: error.sqlMessage
-        });
-
-        return res.status(500).json({
-            status: 500,
-            message: "게시글 조회 중 오류가 발생했습니다.",
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
-        });
-    }
-});
-
-// GET /api/mycrop/:id - 특정 작물 정보 조회
-app.get('/api/mycrop/:id', authenticateToken, async (req, res) => {
-    try {
-        const cropId = req.params.id;
-        const userId = req.user.userId;
-
-        // cropId 유효성 검사
-        if (!cropId || isNaN(cropId)) {
-            return res.status(400).json({
-                status: 400,
-                message: "유효하지 않은 작물 ID입니다.",
-                data: null
-            });
-        }
-
-        // 작물 기본 정보 조회
-        const query = `
-            SELECT 
-                mc.id,
-                mc.user_id,
-                mc.kind as species,
-                mc.nickname,
-                mc.seeding_date as planted_at,
-                mc.harvesting_date as harvest_at,
-                mc.created_at,
-                mc.updated_at,
-                u.username,
-                u.profile_image as user_profile_image,
-                (
-                    SELECT COUNT(*)
-                    FROM SFMARK1.crop_post cp
-                    WHERE cp.crop_id = mc.id AND cp.is_deleted = false
-                ) as posts_count,
-                (
-                    SELECT COALESCE(SUM(l.likes), 0)
-                    FROM SFMARK1.crop_post cp
-                    LEFT JOIN SFMARK1.likes l ON cp.likes_id = l.id
-                    WHERE cp.crop_id = mc.id AND cp.is_deleted = false
-                ) as total_likes,
-                (mc.user_id = ?) as is_owner
-            FROM SFMARK1.my_crop mc
-            JOIN SFMARK1.user u ON mc.user_id = u.id
-            WHERE mc.id = ? AND mc.is_deleted = false
-        `;
-
-        logger.info(`작물 ${cropId} 정보 조회 시작`);
-        const crops = await executeQuery(query, [userId, cropId]);
-
-        if (crops.length === 0) {
-            return res.status(404).json({
-                status: 404,
-                message: "작물을 찾을 수 없습니다.",
-                data: null
-            });
-        }
-
-        // 최근 게시글 조회 (최대 5개)
-        const recentPostsQuery = `
-            SELECT 
-                cp.id,
-                cp.post_img,
-                cp.post_text,
-                cp.created_at,
-                COALESCE(l.likes, 0) as likes,
-                (
-                    SELECT COUNT(*)
-                    FROM SFMARK1.comments c
-                    WHERE c.post_id = cp.id AND c.is_deleted = false
-                ) as comments_count
-            FROM SFMARK1.crop_post cp
-            LEFT JOIN SFMARK1.likes l ON cp.likes_id = l.id
-            WHERE cp.crop_id = ? AND cp.is_deleted = false
-            ORDER BY cp.created_at DESC
-            LIMIT 5
-        `;
-
-        const recentPosts = await executeQuery(recentPostsQuery, [cropId]);
-
-        // 날짜 계산
-        const plantedDate = new Date(crops[0].planted_at);
-        const currentDate = new Date();
-        const daysSincePlanting = Math.floor((currentDate - plantedDate) / (1000 * 60 * 60 * 24));
-
-        // 응답 데이터 구성
-        const cropData = {
-            ...crops[0],
-            planted_at: crops[0].planted_at instanceof Date 
-                ? crops[0].planted_at.toISOString().split('T')[0]
-                : crops[0].planted_at,
-            harvest_at: crops[0].harvest_at instanceof Date 
-                ? crops[0].harvest_at.toISOString().split('T')[0]
-                : crops[0].harvest_at,
-            created_at: crops[0].created_at instanceof Date 
-                ? crops[0].created_at.toISOString()
-                : crops[0].created_at,
-            updated_at: crops[0].updated_at instanceof Date 
-                ? crops[0].updated_at.toISOString()
-                : crops[0].updated_at,
-            user_profile_image: crops[0].user_profile_image || null,
-            is_owner: Boolean(crops[0].is_owner),
-            days_since_planting: daysSincePlanting,
-            recent_posts: recentPosts.map(post => ({
-                ...post,
-                post_img: post.post_img || null,
-                created_at: post.created_at instanceof Date 
-                    ? post.created_at.toISOString()
-                    : post.created_at
-            }))
-        };
-
-        logger.info(`작물 ${cropId} 정보 조회 성공`);
-
-        return res.status(200).json({
-            status: 200,
-            message: "작물 정보 조회 성공",
-            data: cropData
-        });
-
-    } catch (error) {
-        logger.error('작물 정보 조회 중 오류:', error);
-        
-        if (error.sql) {
-            logger.error('SQL 에러:', {
-                sql: error.sql,
-                sqlMessage: error.sqlMessage,
-                sqlState: error.sqlState
-            });
-        }
-
-        return res.status(500).json({
-            status: 500,
-            message: "작물 정보 조회 중 오류가 발생했습니다.",
             data: null
         });
     }
