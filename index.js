@@ -816,61 +816,36 @@ app.get('/api/mycrop/:crop_id/posts', authenticateToken, async (req, res) => {
         const user_id = req.user.userId;
         const crop_id = req.params.crop_id;
 
-        // 먼저 해당 작물이 현재 사용자의 것인지 확인
-        const cropCheckQuery = `
-            SELECT id FROM SFMARK1.my_crop 
-            WHERE id = ? AND user_id = ? AND is_deleted = false
-        `;
-        const cropCheck = await executeQuery(cropCheckQuery, [crop_id, user_id]);
-
-        if (cropCheck.length === 0) {
-            return res.status(404).json({
-                status: 404,
-                message: "해당 작물을 찾을 수 없습니다.",
-                data: null
-            });
-        }
-
-        // 해당 작물의 게시글들 조회
+        // 해당 작물의 게시글들 조회 쿼리 수정
         const query = `
             SELECT 
                 cp.id,
                 cp.user_id,
-                cp.crop_id,
+                cp.crop_id as cropId,  // cropId로 변경
                 cp.post_img,
                 cp.post_text,
                 cp.created_at,
                 cp.updated_at,
-                mc.nickname as crop_nickname,
-                mc.kind as crop_kind
+                cp.is_deleted,         // is_deleted 필드 추가
+                l.likes                // likes 정보 추가
             FROM SFMARK1.crop_post cp
-            JOIN SFMARK1.my_crop mc ON cp.crop_id = mc.id
+            LEFT JOIN SFMARK1.likes l ON cp.likes_id = l.id
             WHERE cp.crop_id = ? 
-            AND cp.is_deleted = false
             ORDER BY cp.created_at DESC
         `;
 
         const posts = await executeQuery(query, [crop_id]);
 
-        // 이미지 URL 및 날짜 형식 처리
-        const formattedPosts = posts.map(post => ({
-            id: post.id,
-            user_id: post.user_id,
-            crop_id: post.crop_id,
-            post_img: post.post_img,  // 이미 /uploads/를 포함한 경로
-            post_text: post.post_text,
-            created_at: post.created_at,
-            updated_at: post.updated_at,
-            crop_nickname: post.crop_nickname,
-            crop_kind: post.crop_kind
-        }));
-
-        logger.info(`작물 ${crop_id}의 게시글 목록 조회 성공`);
-
+        // 응답 형식 수정
         return res.status(200).json({
             status: 200,
             message: "게시글 목록 조회 성공",
-            data: formattedPosts
+            data: posts.map(post => ({
+                ...post,
+                post_img: post.post_img ? post.post_img : null,  // null 처리
+                created_at: post.created_at.toISOString(),
+                updated_at: post.updated_at.toISOString()
+            }))
         });
 
     } catch (error) {
