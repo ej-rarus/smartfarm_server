@@ -955,3 +955,128 @@ app.post('/api/mycrop', authenticateToken, async (req, res) => {
         });
     }
 });
+
+// POST /api/mycrop/:crop_id/posts - 새로운 작물 게시글 추가
+app.post('/api/mycrop/:crop_id/posts', authenticateToken, upload.single('post_img'), async (req, res) => {
+    try {
+        const user_id = req.user.userId;
+        const crop_id = req.params.crop_id;
+        const { post_text } = req.body;
+
+        // 필수 필드 검증
+        if (!post_text) {
+            // 업로드된 이미지가 있다면 삭제
+            if (req.file) {
+                fs.unlink(req.file.path, (err) => {
+                    if (err) logger.error('파일 삭제 실패:', err);
+                });
+            }
+            return res.status(400).json({
+                status: 400,
+                message: "게시글 내용은 필수입니다.",
+                data: null
+            });
+        }
+
+        // 작물 소유권 확인
+        const cropCheckQuery = `
+            SELECT id FROM SFMARK1.my_crop 
+            WHERE id = ? AND user_id = ? AND is_deleted = 0
+        `;
+        const cropCheck = await executeQuery(cropCheckQuery, [crop_id, user_id]);
+
+        if (cropCheck.length === 0) {
+            // 업로드된 이미지가 있다면 삭제
+            if (req.file) {
+                fs.unlink(req.file.path, (err) => {
+                    if (err) logger.error('파일 삭제 실패:', err);
+                });
+            }
+            return res.status(404).json({
+                status: 404,
+                message: "해당 작물을 찾을 수 없습니다.",
+                data: null
+            });
+        }
+
+        // 트랜잭션 시작
+        const connection = await db.promise().getConnection();
+        await connection.beginTransaction();
+
+        try {
+            // 1. crop_post 테이블에 게시글 추가
+            const postQuery = `
+                INSERT INTO SFMARK1.crop_post 
+                (user_id, crop_id, post_img, post_text, created_at, updated_at)
+                VALUES (?, ?, ?, ?, NOW(), NOW())
+            `;
+
+            const [postResult] = await connection.execute(postQuery, [
+                user_id,
+                crop_id,
+                req.file ? `/uploads/${req.file.filename}` : null,
+                post_text
+            ]);
+
+            // 2. likes 테이블에 연동 레코드 추가
+            const likesQuery = `
+                INSERT INTO SFMARK1.likes (likes, post_id)
+                VALUES (0, ?)
+            `;
+
+            const [likesResult] = await connection.execute(likesQuery, [postResult.insertId]);
+
+            // 3. crop_post 테이블의 likes_id 업데이트
+            const updatePostQuery = `
+                UPDATE SFMARK1.crop_post 
+                SET likes_id = ?
+                WHERE id = ?
+            `;
+
+            await connection.execute(updatePostQuery, [likesResult.insertId, postResult.insertId]);
+
+            // 트랜잭션 커밋
+            await connection.commit();
+
+            logger.info('새로운 게시글 추가 성공:', { postId: postResult.insertId, likesId: likesResult.insertId });
+
+            return res.status(201).json({
+                status: 201,
+                message: "게시글이 성공적으로 추가되었습니다.",
+                data: {
+                    id: postResult.insertId,
+                    user_id,
+                    crop_id,
+                    post_img: req.file ? `/uploads/${req.file.filename}` : null,
+                    post_text,
+                    likes_id: likesResult.insertId,
+                    likes: 0,
+                    created_at: new Date(),
+                    updated_at: new Date()
+                }
+            });
+
+        } catch (error) {
+            // 트랜잭션 롤백
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
+
+    } catch (error) {
+        // 업로드된 이미지가 있다면 삭제
+        if (req.file) {
+            fs.unlink(req.file.path, (err) => {
+                if (err) logger.error('파일 삭제 실패:', err);
+            });
+        }
+
+        logger.error('게시글 추가 중 오류 발생:', error);
+        return res.status(500).json({
+            status: 500,
+            message: "게시글 추가 중 오류가 발생했습니다.",
+            data: null
+        });
+    }
+});
