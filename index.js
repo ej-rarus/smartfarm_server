@@ -1100,36 +1100,28 @@ app.get('/api/post/:id', authenticateToken, async (req, res) => {
         const postId = req.params.id;
         const userId = req.user.userId;
 
-        // 디버깅을 위한 로그 추가
-        console.log('요청된 게시글 ID:', postId);
-        console.log('요청한 사용자 ID:', userId);
-
         const query = `
             SELECT 
-                p.id,
-                p.user_id,
-                p.crop_id,
-                p.post_img,
-                p.post_text,
-                p.created_at,
-                p.updated_at,
-                p.is_deleted,
-                u.username,
+                cp.id,
+                cp.user_id,
+                cp.crop_id,
+                cp.post_img,
+                cp.post_text,
+                cp.created_at,
+                cp.updated_at,
+                cp.likes_id,
+                l.likes,
                 mc.species,
                 mc.nickname
-            FROM SFMARK1.crop_post p
-            LEFT JOIN SFMARK1.user u ON p.user_id = u.id
-            LEFT JOIN SFMARK1.my_crop mc ON p.crop_id = mc.id
-            WHERE p.id = ? AND p.is_deleted = 0
+            FROM SFMARK1.crop_post cp
+            LEFT JOIN SFMARK1.likes l ON cp.likes_id = l.id
+            LEFT JOIN SFMARK1.my_crop mc ON cp.crop_id = mc.id
+            WHERE cp.id = ? AND cp.is_deleted = false
         `;
 
-        console.log('실행할 쿼리:', query);
-        console.log('쿼리 파라미터:', [postId]);
+        const results = await executeQuery(query, [postId]);
 
-        const result = await executeQuery(query, [postId]);
-        console.log('쿼리 결과:', result);
-
-        if (result.length === 0) {
+        if (results.length === 0) {
             return res.status(404).json({
                 status: 404,
                 message: "게시글을 찾을 수 없습니다.",
@@ -1137,11 +1129,12 @@ app.get('/api/post/:id', authenticateToken, async (req, res) => {
             });
         }
 
-        // 응답 데이터 구성
-        const post = {
-            ...result[0],
-            is_owner: result[0].user_id === userId
-        };
+        const post = results[0];
+        
+        // 이미지 URL이 있는 경우 전체 경로로 변환
+        if (post.post_img && !post.post_img.startsWith('http')) {
+            post.post_img = `${post.post_img}`;
+        }
 
         return res.status(200).json({
             status: 200,
@@ -1150,11 +1143,11 @@ app.get('/api/post/:id', authenticateToken, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('게시글 조회 중 상세 에러:', error);
+        logger.error('게시글 조회 중 오류 발생:', error);
         return res.status(500).json({
             status: 500,
             message: "게시글 조회 중 오류가 발생했습니다.",
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            data: null
         });
     }
 });
