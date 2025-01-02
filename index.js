@@ -1093,3 +1093,39 @@ app.post('/api/mycrop/:crop_id/posts', authenticateToken, upload.single('post_im
         });
     }
 });
+
+// GET /api/post/:post_id - 특정 게시글 상세 정보 조회
+app.get('/api/post/:post_id', authenticateToken, async (req, res) => {
+    try {
+        const postId = req.params.post_id;
+        const userId = req.user.userId;
+
+        const query = `
+            SELECT 
+                p.*,
+                u.username,
+                mc.species,
+                mc.nickname
+            FROM SFMARK1.crop_post p
+            LEFT JOIN SFMARK1.user u ON p.user_id = u.id
+            LEFT JOIN SFMARK1.my_crop mc ON p.crop_id = mc.id
+            WHERE p.id = ? AND p.is_deleted = false
+        `;
+
+        const result = await executeQuery(query, [postId]);
+
+        if (result.length === 0) {
+            return res.status(404).json({
+                message: "게시글을 찾을 수 없습니다."
+            });
+        }
+
+        return res.status(200).json(result[0]);
+
+    } catch (error) {
+        console.error('게시글 조회 중 오류:', error);
+        return res.status(500).json({
+            message: "게시글 조회 중 오류가 발생했습니다."
+        });
+    }
+});
