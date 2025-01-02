@@ -1120,19 +1120,24 @@ app.get('/api/crop-post/:id', authenticateToken, async (req, res) => {
         const postId = req.params.id;
         const userId = req.user.userId;
 
-        console.log('요청 받은 파라미터:', { postId, userId });
-
-        // 1. 먼저 crop_post 테이블만 조회
+        // JOIN을 사용하여 한 번에 모든 정보 조회
         const query = `
-            SELECT * FROM crop_post 
-            WHERE id = ? AND is_deleted = false
+            SELECT 
+                cp.*,
+                u.username,
+                u.profile_image as user_profile_image,
+                mc.kind as crop_kind,
+                mc.nickname as crop_nickname,
+                COALESCE(l.likes, 0) as likes_count,
+                (SELECT COUNT(*) FROM comments WHERE post_id = cp.id AND is_deleted = false) as comments_count
+            FROM crop_post cp
+            JOIN user u ON cp.user_id = u.id
+            JOIN my_crop mc ON cp.crop_id = mc.id
+            LEFT JOIN likes l ON cp.likes_id = l.id
+            WHERE cp.id = ? AND cp.is_deleted = false
         `;
 
-        console.log('실행할 쿼리:', query);
-        console.log('쿼리 파라미터:', [postId]);
-
         const result = await executeQuery(query, [postId]);
-        console.log('쿼리 결과:', result);
 
         if (result.length === 0) {
             return res.status(404).json({
@@ -1142,17 +1147,13 @@ app.get('/api/crop-post/:id', authenticateToken, async (req, res) => {
             });
         }
 
-        // 기본 정보만 반환
+        // 응답 데이터 구성
         const post = {
-            id: result[0].id,
-            user_id: result[0].user_id,
-            crop_id: result[0].crop_id,
-            post_img: result[0].post_img,
-            post_text: result[0].post_text,
-            created_at: result[0].created_at,
-            updated_at: result[0].updated_at,
-            likes_id: result[0].likes_id,
-            is_owner: result[0].user_id === userId
+            ...result[0],
+            is_owner: result[0].user_id === userId,
+            created_at: result[0].created_at instanceof Date 
+                ? result[0].created_at.toISOString()
+                : result[0].created_at
         };
 
         return res.status(200).json({
@@ -1162,14 +1163,7 @@ app.get('/api/crop-post/:id', authenticateToken, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('상세 에러 정보:', {
-            message: error.message,
-            stack: error.stack,
-            code: error.code,
-            sqlMessage: error.sqlMessage,
-            sqlState: error.sqlState
-        });
-
+        console.error('상세 에러 정보:', error);
         return res.status(500).json({
             status: 500,
             message: "게시글 조회 중 오류가 발생했습니다.",
