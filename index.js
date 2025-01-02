@@ -816,44 +816,67 @@ app.get('/api/mycrop/:crop_id/posts', authenticateToken, async (req, res) => {
         const user_id = req.user.userId;
         const crop_id = req.params.crop_id;
 
-        // 해당 작물의 게시글들 조회 쿼리 수정
+        console.log('요청 받은 파라미터:', { user_id, crop_id });
+
+        // 1. 작물 확인 쿼리
+        const cropCheckQuery = `
+            SELECT id FROM my_crop 
+            WHERE id = ? AND user_id = ? AND is_deleted = false
+        `;
+        
+        console.log('작물 확인 쿼리:', cropCheckQuery);
+        const cropCheck = await executeQuery(cropCheckQuery, [crop_id, user_id]);
+        console.log('작물 확인 결과:', cropCheck);
+
+        if (cropCheck.length === 0) {
+            return res.status(404).json({
+                status: 404,
+                message: "해당 작물을 찾을 수 없습니다.",
+                data: null
+            });
+        }
+
+        // 2. 게시글 조회 쿼리
         const query = `
             SELECT 
-                cp.id,
-                cp.user_id,
-                cp.crop_id as cropId,  // cropId로 변경
-                cp.post_img,
-                cp.post_text,
-                cp.created_at,
-                cp.updated_at,
-                cp.is_deleted,         // is_deleted 필드 추가
-                l.likes                // likes 정보 추가
-            FROM SFMARK1.crop_post cp
-            LEFT JOIN SFMARK1.likes l ON cp.likes_id = l.id
-            WHERE cp.crop_id = ? 
-            ORDER BY cp.created_at DESC
+                id,
+                user_id,
+                crop_id,
+                post_img,
+                post_text,
+                created_at,
+                updated_at,
+                is_deleted,
+                likes_id
+            FROM crop_post
+            WHERE crop_id = ? 
+            AND is_deleted = false
+            ORDER BY created_at DESC
         `;
 
+        console.log('게시글 조회 쿼리:', query);
         const posts = await executeQuery(query, [crop_id]);
+        console.log('조회된 게시글:', posts);
 
-        // 응답 형식 수정
         return res.status(200).json({
             status: 200,
             message: "게시글 목록 조회 성공",
-            data: posts.map(post => ({
-                ...post,
-                post_img: post.post_img ? post.post_img : null,  // null 처리
-                created_at: post.created_at.toISOString(),
-                updated_at: post.updated_at.toISOString()
-            }))
+            data: posts
         });
 
     } catch (error) {
-        logger.error('게시글 목록 조회 중 오류 발생:', error);
+        console.error('상세 에러 정보:', {
+            message: error.message,
+            stack: error.stack,
+            code: error.code,
+            sqlMessage: error.sqlMessage,
+            sqlState: error.sqlState
+        });
+
         return res.status(500).json({
             status: 500,
             message: "게시글 목록 조회 중 오류가 발생했습니다.",
-            data: null
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 });
