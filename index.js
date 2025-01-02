@@ -202,18 +202,7 @@ app.get('/api/kamis/price', async (req, res) => {
     }
 });
 
-// USERS 정보 테스트
-app.get('/api/users', (req, res) => {
-    db.query('SELECT * FROM SFMARK1.test_table;', (err, results) => {
-        if (err) {
-            logger.error('쿼리 실행 중 오류 발생:', { error: err.message, stack: err.stack });
-            res.status(500).send('500 서버 오류');
-            return;
-        }
-        logger.info('사용자 목록 조회 성공');
-        res.json(results);
-    });
-});
+
 
 // 모든 DIARY 게시글 정보 가져오기 (is_delete가 false인 것만)
 app.get('/api/diary', async (req, res) => {
@@ -1147,6 +1136,69 @@ app.get('/api/post/:id', authenticateToken, async (req, res) => {
         return res.status(500).json({
             status: 500,
             message: "게시글 조회 중 오류가 발생했습니다.",
+            data: null
+        });
+    }
+});
+
+// GET /api/user/:id - 특정 사용자 정보 조회
+app.get('/api/user/:id', authenticateToken, async (req, res) => {
+    try {
+        const targetUserId = req.params.id;
+        const requestUserId = req.user.userId;
+
+        const query = `
+            SELECT 
+                user_id,
+                username,
+                profile_image,
+                created_at,
+                is_active,
+                role_id
+            FROM ${TABLES.USER}
+            WHERE user_id = ? AND is_active = true
+        `;
+
+        const results = await executeQuery(query, [targetUserId]);
+
+        if (results.length === 0) {
+            return res.status(404).json({
+                status: 404,
+                message: "사용자를 찾을 수 없습니다.",
+                data: null
+            });
+        }
+
+        const user = results[0];
+
+        // 프로필 이미지 URL 처리
+        if (user.profile_image && !user.profile_image.startsWith('http')) {
+            user.profile_image = `${user.profile_image}`; // 필요한 경우 기본 URL 추가
+        }
+
+        // 기본 사용자 정보 구성
+        const userData = {
+            user_id: user.user_id,
+            username: user.username,
+            profile_image: user.profile_image || null,
+            // 자신의 정보를 조회하는 경우에만 추가 정보 제공
+            ...(requestUserId === parseInt(targetUserId) && {
+                created_at: user.created_at,
+                role_id: user.role_id
+            })
+        };
+
+        return res.status(200).json({
+            status: 200,
+            message: "사용자 정보 조회 성공",
+            data: userData
+        });
+
+    } catch (error) {
+        logger.error('사용자 정보 조회 중 오류 발생:', error);
+        return res.status(500).json({
+            status: 500,
+            message: "사용자 정보 조회 중 오류가 발생했습니다.",
             data: null
         });
     }
