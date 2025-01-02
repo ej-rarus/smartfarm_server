@@ -56,15 +56,24 @@ const openai = new OpenAI({
 const app = express();
 app.use(express.json());
 app.use(cors({
-    origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    credentials: true
+    origin: ['http://localhost:3000', 'http://3.39.126.121:3000'],  // 허용할 도메인 명시
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+    exposedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // Helmet 미들웨어 추가
 app.use(helmet({
-    contentSecurityPolicy: false,  // CSP를 비활성화하거나
-    crossOriginEmbedderPolicy: false
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginEmbedderPolicy: false,
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            imgSrc: ["'self'", "data:", "blob:", "*"],
+            connectSrc: ["'self'", "*"],
+        }
+    }
 }));
 
 // 요청 로깅 미들웨어
@@ -674,7 +683,13 @@ app.post('/api/chat', authenticateToken, async (req, res) => {
 });
 
 // 정적 파일 제공을 위한 미들웨어 추가
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', (req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+    next();
+}, express.static(path.join(__dirname, 'uploads')));
 
 // 작물 게시글 추가 엔드포인트
 app.post('/api/crop-post', authenticateToken, upload.single('post_img'), async (req, res) => {
