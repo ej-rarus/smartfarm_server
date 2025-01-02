@@ -1128,8 +1128,8 @@ app.get('/api/crop-post/:id', authenticateToken, async (req, res) => {
                 u.profile_image as user_profile_image,
                 mc.kind as crop_kind,
                 mc.nickname as crop_nickname,
-                COALESCE(l.likes, 0) as likes_count,
-                (SELECT COUNT(*) FROM comments WHERE post_id = cp.id AND is_deleted = false) as comments_count
+                COALESCE(l.likes, 0) as likes,
+                (SELECT COUNT(*) FROM comments c WHERE c.post_id = cp.id AND c.is_deleted = false) as comments
             FROM crop_post cp
             JOIN user u ON cp.user_id = u.id
             JOIN my_crop mc ON cp.crop_id = mc.id
@@ -1150,10 +1150,7 @@ app.get('/api/crop-post/:id', authenticateToken, async (req, res) => {
         // 응답 데이터 구성
         const post = {
             ...result[0],
-            is_owner: result[0].user_id === userId,
-            created_at: result[0].created_at instanceof Date 
-                ? result[0].created_at.toISOString()
-                : result[0].created_at
+            is_owner: result[0].user_id === userId
         };
 
         return res.status(200).json({
