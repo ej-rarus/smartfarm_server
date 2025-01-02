@@ -1120,28 +1120,21 @@ app.get('/api/crop-post/:id', authenticateToken, async (req, res) => {
         const postId = req.params.id;
         const userId = req.user.userId;
 
-        logger.info('요청 파라미터:', { postId, userId });
+        console.log('요청 받은 파라미터:', { postId, userId });
 
-        // 1단계: 먼저 게시글 기본 정보만 조회
-        const basicQuery = `
-            SELECT 
-                id,
-                user_id,
-                crop_id,
-                post_img,
-                post_text,
-                created_at,
-                updated_at,
-                likes_id,
-                is_deleted
-            FROM SFMARK1.crop_post
+        // 1. 먼저 crop_post 테이블만 조회
+        const query = `
+            SELECT * FROM crop_post 
             WHERE id = ? AND is_deleted = false
         `;
 
-        const posts = await executeQuery(basicQuery, [postId]);
-        logger.info('기본 쿼리 결과:', posts);
+        console.log('실행할 쿼리:', query);
+        console.log('쿼리 파라미터:', [postId]);
 
-        if (posts.length === 0) {
+        const result = await executeQuery(query, [postId]);
+        console.log('쿼리 결과:', result);
+
+        if (result.length === 0) {
             return res.status(404).json({
                 status: 404,
                 message: "게시글을 찾을 수 없습니다.",
@@ -1149,45 +1142,18 @@ app.get('/api/crop-post/:id', authenticateToken, async (req, res) => {
             });
         }
 
-        // 2단계: 추가 정보 조회
-        const detailQuery = `
-            SELECT 
-                u.username,
-                u.profile_image,
-                mc.nickname as crop_nickname,
-                COALESCE(l.likes, 0) as likes
-            FROM SFMARK1.user u
-            JOIN SFMARK1.my_crop mc ON mc.id = ?
-            LEFT JOIN SFMARK1.likes l ON l.id = ?
-            WHERE u.id = ?
-        `;
-
-        const details = await executeQuery(detailQuery, [
-            posts[0].crop_id,
-            posts[0].likes_id,
-            posts[0].user_id
-        ]);
-        logger.info('상세 쿼리 결과:', details);
-
-        // 3단계: 댓글 수 조회
-        const commentQuery = `
-            SELECT COUNT(*) as comment_count
-            FROM SFMARK1.comments
-            WHERE post_id = ? AND is_deleted = false
-        `;
-
-        const comments = await executeQuery(commentQuery, [postId]);
-        logger.info('댓글 쿼리 결과:', comments);
-
-        // 결과 조합
+        // 기본 정보만 반환
         const post = {
-            ...posts[0],
-            ...details[0],
-            comments: comments[0].comment_count,
-            is_owner: posts[0].user_id === userId
+            id: result[0].id,
+            user_id: result[0].user_id,
+            crop_id: result[0].crop_id,
+            post_img: result[0].post_img,
+            post_text: result[0].post_text,
+            created_at: result[0].created_at,
+            updated_at: result[0].updated_at,
+            likes_id: result[0].likes_id,
+            is_owner: result[0].user_id === userId
         };
-
-        logger.info('최종 응답 데이터:', post);
 
         return res.status(200).json({
             status: 200,
@@ -1196,10 +1162,10 @@ app.get('/api/crop-post/:id', authenticateToken, async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('게시글 조회 중 오류:', {
+        console.error('상세 에러 정보:', {
             message: error.message,
             stack: error.stack,
-            sql: error.sql,
+            code: error.code,
             sqlMessage: error.sqlMessage,
             sqlState: error.sqlState
         });
