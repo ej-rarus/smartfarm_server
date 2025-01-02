@@ -1120,7 +1120,7 @@ app.get('/api/post/:id', authenticateToken, async (req, res) => {
             FROM SFMARK1.crop_post p
             LEFT JOIN SFMARK1.user u ON p.user_id = u.id
             LEFT JOIN SFMARK1.my_crop mc ON p.crop_id = mc.id
-            WHERE p.id = ? AND p.is_deleted = false
+            WHERE p.id = ? AND p.is_deleted = 0
         `;
 
         console.log('실행할 쿼리:', query);
