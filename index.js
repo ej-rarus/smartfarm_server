@@ -1203,3 +1203,64 @@ app.get('/api/user/:id', authenticateToken, async (req, res) => {
         });
     }
 });
+
+// GET /api/posts - 전체 게시글 목록 조회 (페이지네이션)
+app.get('/api/posts', authenticateToken, async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 5;
+        const offset = (page - 1) * limit;
+
+        const query = `
+            SELECT 
+                cp.id,
+                cp.user_id,
+                cp.crop_id,
+                cp.post_img,
+                cp.post_text,
+                cp.created_at,
+                cp.updated_at,
+                u.username,
+                u.profile_image,
+                mc.species,
+                mc.nickname,
+                COALESCE(l.likes, 0) as likes,
+                COALESCE(c.comment_count, 0) as comments
+            FROM SFMARK1.crop_post cp
+            LEFT JOIN SFMARK1.user u ON cp.user_id = u.user_id
+            LEFT JOIN SFMARK1.my_crop mc ON cp.crop_id = mc.id
+            LEFT JOIN SFMARK1.likes l ON cp.likes_id = l.id
+            LEFT JOIN (
+                SELECT post_id, COUNT(*) as comment_count 
+                FROM SFMARK1.comments 
+                GROUP BY post_id
+            ) c ON cp.id = c.post_id
+            WHERE cp.is_deleted = false
+            ORDER BY cp.created_at DESC
+            LIMIT ? OFFSET ?
+        `;
+
+        const results = await executeQuery(query, [limit, offset]);
+
+        // 이미지 URL 처리
+        const posts = results.map(post => ({
+            ...post,
+            post_img: post.post_img ? `${post.post_img}` : null,
+            profile_image: post.profile_image ? `${post.profile_image}` : null
+        }));
+
+        return res.status(200).json({
+            status: 200,
+            message: "게시글 목록 조회 성공",
+            data: posts
+        });
+
+    } catch (error) {
+        logger.error('게시글 목록 조회 중 오류 발생:', error);
+        return res.status(500).json({
+            status: 500,
+            message: "게시글 목록 조회 중 오류가 발생했습니다.",
+            data: null
+        });
+    }
+});
