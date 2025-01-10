@@ -1281,3 +1281,167 @@ app.get('/api/posts', authenticateToken, async (req, res) => {
         });
     }
 });
+
+// POST /api/sensor-data - 센서 데이터 저장
+app.post('/api/sensor-data', async (req, res) => {
+    try {
+        const { sensor_id, temperature, humidity, light_intensity } = req.body;
+
+        // 필수 필드 검증
+        if (!sensor_id || temperature == null || humidity == null || light_intensity == null) {
+            return res.status(400).json({
+                status: 400,
+                message: "필수 필드가 누락되었습니다. (sensor_id, temperature, humidity, light_intensity)",
+                data: null
+            });
+        }
+
+        // 데이터 타입 및 범위 검증
+        if (typeof temperature !== 'number' || 
+            typeof humidity !== 'number' || 
+            typeof light_intensity !== 'number') {
+            return res.status(400).json({
+                status: 400,
+                message: "잘못된 데이터 형식입니다. 숫자 형식이어야 합니다.",
+                data: null
+            });
+        }
+
+        // 센서 데이터 저장
+        const query = `
+            INSERT INTO SFMARK1.sensor_data 
+            (sensor_id, temperature, humidity, light_intensity)
+            VALUES (?, ?, ?, ?)
+        `;
+
+        const result = await executeQuery(query, [
+            sensor_id,
+            temperature,
+            humidity,
+            light_intensity
+        ]);
+
+        logger.info('센서 데이터 저장 성공:', {
+            sensor_id,
+            temperature,
+            humidity,
+            light_intensity
+        });
+
+        return res.status(201).json({
+            status: 201,
+            message: "센서 데이터가 성공적으로 저장되었습니다.",
+            data: {
+                id: result.insertId,
+                sensor_id,
+                temperature,
+                humidity,
+                light_intensity,
+                created_at: new Date()
+            }
+        });
+
+    } catch (error) {
+        logger.error('센서 데이터 저장 중 오류 발생:', error);
+        return res.status(500).json({
+            status: 500,
+            message: "센서 데이터 저장 중 오류가 발생했습니다.",
+            data: null
+        });
+    }
+});
+
+// GET /api/sensor-data/:sensorId - 특정 센서의 최근 24시간 데이터 조회
+app.get('/api/sensor-data/:sensorId', async (req, res) => {
+    try {
+        const { sensorId } = req.params;
+        
+        // 선택적 쿼리 파라미터
+        const hours = req.query.hours ? parseInt(req.query.hours) : 24; // 기본값 24시간
+        
+        const query = `
+            SELECT 
+                id,
+                sensor_id,
+                temperature,
+                humidity,
+                light_intensity,
+                created_at
+            FROM SFMARK1.sensor_data
+            WHERE 
+                sensor_id = ?
+                AND created_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)
+            ORDER BY created_at DESC
+        `;
+
+        const results = await executeQuery(query, [sensorId, hours]);
+
+        if (results.length === 0) {
+            return res.status(404).json({
+                status: 404,
+                message: "해당 센서의 데이터가 없습니다.",
+                data: null
+            });
+        }
+
+        // 데이터 가공 및 통계 계산
+        const stats = results.reduce((acc, curr) => {
+            acc.tempSum += curr.temperature;
+            acc.humidSum += curr.humidity;
+            acc.lightSum += curr.light_intensity;
+            
+            acc.tempMax = Math.max(acc.tempMax, curr.temperature);
+            acc.tempMin = Math.min(acc.tempMin, curr.temperature);
+            acc.humidMax = Math.max(acc.humidMax, curr.humidity);
+            acc.humidMin = Math.min(acc.humidMin, curr.humidity);
+            acc.lightMax = Math.max(acc.lightMax, curr.light_intensity);
+            acc.lightMin = Math.min(acc.lightMin, curr.light_intensity);
+            
+            return acc;
+        }, {
+            tempSum: 0, humidSum: 0, lightSum: 0,
+            tempMax: -Infinity, tempMin: Infinity,
+            humidMax: -Infinity, humidMin: Infinity,
+            lightMax: -Infinity, lightMin: Infinity
+        });
+
+        const count = results.length;
+        const summary = {
+            temperature: {
+                average: (stats.tempSum / count).toFixed(1),
+                max: stats.tempMax.toFixed(1),
+                min: stats.tempMin.toFixed(1)
+            },
+            humidity: {
+                average: (stats.humidSum / count).toFixed(1),
+                max: stats.humidMax.toFixed(1),
+                min: stats.humidMin.toFixed(1)
+            },
+            light_intensity: {
+                average: (stats.lightSum / count).toFixed(1),
+                max: stats.lightMax.toFixed(1),
+                min: stats.lightMin.toFixed(1)
+            }
+        };
+
+        return res.status(200).json({
+            status: 200,
+            message: "센서 데이터 조회 성공",
+            data: {
+                sensor_id: sensorId,
+                summary,
+                total_records: count,
+                period: `최근 ${hours}시간`,
+                records: results
+            }
+        });
+
+    } catch (error) {
+        logger.error('센서 데이터 조회 중 오류 발생:', error);
+        return res.status(500).json({
+            status: 500,
+            message: "센서 데이터 조회 중 오류가 발생했습니다.",
+            data: null
+        });
+    }
+});
