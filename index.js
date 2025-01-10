@@ -14,6 +14,24 @@ const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
 
+
+
+const allowedOrigins = [
+  'http://farmster.co.kr/',
+  'http://localhost:3000', // 개발 환경
+];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (allowedOrigins.includes(origin) || !origin) { // !origin은 CORS 없이 요청하는 경우 허용 (ex: Postman)
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+}));
+
 // uploads 디렉토리 확인 및 생성
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)){
