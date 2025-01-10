@@ -59,32 +59,26 @@ const openai = new OpenAI({
 const app = express();
 app.use(express.json());
 app.use(cors({
-    origin: [
-        'http://localhost:3000',
-        'http://3.39.126.121:3000',
-        'http://farmster.co.kr',
-        'https://farmster.co.kr'
-    ],
+    origin: function (origin, callback) {
+        const allowedOrigins = [
+            'http://localhost:3000',
+            'http://3.39.126.121:3000',
+            'http://farmster.co.kr',
+            'https://farmster.co.kr'
+        ];
+        
+        // origin이 없거나 허용된 도메인인 경우
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
     exposedHeaders: ['Content-Type', 'Authorization']
 }));
-
-// 추가적인 CORS 헤더 설정
-app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', 'http://farmster.co.kr');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    res.header('Access-Control-Allow-Credentials', 'true');
-    
-    // OPTIONS 요청에 대한 처리
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
-    }
-    
-    next();
-});
 
 // Helmet 미들웨어 추가
 app.use(helmet({
