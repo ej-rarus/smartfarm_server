@@ -16,21 +16,6 @@ const fs = require('fs');
 
 
 
-const allowedOrigins = [
-  'http://farmster.co.kr/',
-  'http://localhost:3000', // 개발 환경
-];
-
-app.use(cors({
-  origin: function (origin, callback) {
-    if (allowedOrigins.includes(origin) || !origin) { // !origin은 CORS 없이 요청하는 경우 허용 (ex: Postman)
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-}));
 
 // uploads 디렉토리 확인 및 생성
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -74,7 +59,8 @@ const openai = new OpenAI({
 const app = express();
 app.use(express.json());
 app.use(cors({
-    origin: ['http://localhost:3000', 'http://3.39.126.121:3000'],  // 허용할 도메인 명시
+    origin: ['http://localhost:3000', 'http://3.39.126.121:3000', 'http://farmster.co.kr/',
+    ],  // 허용할 도메인 명시
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
