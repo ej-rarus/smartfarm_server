@@ -274,11 +274,35 @@ app.post('/api/signup', async (req, res) => {
     try {
         const { email_adress, password, username, marketing_agree } = req.body;
         
-        // 필수 필드 검증
-        if (!email_adress || !password || !username) {
+        // 디버깅을 위한 요청 데이터 로깅
+        logger.info('회원가입 요청 데이터:', {
+            email_adress,
+            username,
+            marketing_agree,
+            hasPassword: !!password
+        });
+        
+        // 필수 필드 개별 검증
+        if (!email_adress) {
             return res.status(400).json({
                 status: 400,
-                message: '필수 정보가 누락되었습니다.',
+                message: '이메일 주소를 입력해주세요.',
+                data: null
+            });
+        }
+
+        if (!password) {
+            return res.status(400).json({
+                status: 400,
+                message: '비밀번호를 입력해주세요.',
+                data: null
+            });
+        }
+
+        if (!username) {
+            return res.status(400).json({
+                status: 400,
+                message: '사용자 이름을 입력해주세요.',
                 data: null
             });
         }
@@ -293,12 +317,11 @@ app.post('/api/signup', async (req, res) => {
             });
         }
         
-        // 비밀번호 복잡성 검증
-        const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/;
-        if (!passwordRegex.test(password)) {
+        // 비밀번호 검증 (간단한 버전으로 수정)
+        if (password.length < 8) {
             return res.status(400).json({
                 status: 400,
-                message: '비밀번호는 최소 8자 이상이며, 문자와 숫자를 포함해야 합니다.',
+                message: '비밀번호는 최소 8자 이상이어야 합니다.',
                 data: null
             });
         }
@@ -326,9 +349,8 @@ app.post('/api/signup', async (req, res) => {
                 marketing_agree, 
                 created_at,
                 updated_at,
-                is_active,
                 role_id
-            ) VALUES (?, ?, ?, ?, NOW(), NOW(), 1, 1)
+            ) VALUES (?, ?, ?, ?, NOW(), NOW(), 1)
         `;
         
         const result = await executeQuery(query, [
@@ -338,7 +360,11 @@ app.post('/api/signup', async (req, res) => {
             marketing_agree ? 1 : 0
         ]);
 
-        logger.info('회원가입 성공:', { email_adress, username });
+        logger.info('회원가입 성공:', { 
+            user_id: result.insertId,
+            email_adress, 
+            username 
+        });
 
         return res.status(201).json({
             status: 201,
@@ -355,7 +381,8 @@ app.post('/api/signup', async (req, res) => {
         return res.status(500).json({
             status: 500,
             message: '서버 오류가 발생했습니다.',
-            data: null
+            data: null,
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 });
