@@ -1157,7 +1157,27 @@ app.get('/api/post/:id', authenticateToken, async (req, res) => {
         });
     }
 });
-
+// GET /api/user/ - 전체 사용자 정보 조회
+app.get('/api/user/', async (req, res) => {
+    try {
+        const query = `
+            SELECT * FROM SFMARK1.user
+        `;
+        const results = await executeQuery(query);
+        return res.status(200).json({
+            status: 200,
+            message: "사용자 정보 조회 성공",
+            data: results
+        });
+    } catch (error) {
+        logger.error('사용자 정보 조회 중 오류 발생:', error);
+        return res.status(500).json({
+            status: 500,
+            message: "사용자 정보 조회 중 오류가 발생했습니다.",
+            data: null
+        });
+    }
+});
 // GET /api/user/:id - 특정 사용자 정보 조회
 app.get('/api/user/:id', authenticateToken, async (req, res) => {
     try {
