@@ -271,119 +271,46 @@ app.get('/api/diary/:id', async (req, res) => {
 
 // 회원가입 요청 처리
 app.post('/api/signup', async (req, res) => {
+    const { email_adress, password, username, marketing_agree } = req.body;
+    
+    // 이메일 형식 검증
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email_adress)) {
+        return res.status(400).json({ message: '올바른 이메일 형식이 아닙니다.' });
+    }
+    
+    // 비밀번호 길이 검증
+    if (password.length < 8) {
+        return res.status(400).json({ message: '비밀번호는 최소 8자 이상이어야 합니다.' });
+    }
+    
+    const created_at = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  
     try {
-        const { email_adress, password, username, marketing_agree } = req.body;
-        
-        // 디버깅을 위한 요청 데이터 로깅
-        logger.info('회원가입 요청 데이터:', {
-            email_adress,
-            username,
-            marketing_agree,
-            hasPassword: !!password
-        });
-        
-        // 필수 필드 개별 검증
-        if (!email_adress) {
-            return res.status(400).json({
-                status: 400,
-                message: '이메일 주소를 입력해주세요.',
-                data: null
-            });
-        }
-
-        if (!password) {
-            return res.status(400).json({
-                status: 400,
-                message: '비밀번호를 입력해주세요.',
-                data: null
-            });
-        }
-
-        if (!username) {
-            return res.status(400).json({
-                status: 400,
-                message: '사용자 이름을 입력해주세요.',
-                data: null
-            });
-        }
-        
-        // 이메일 형식 검증
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email_adress)) {
-            return res.status(400).json({
-                status: 400,
-                message: '올바른 이메일 형식이 아닙니다.',
-                data: null
-            });
-        }
-        
-        // 비밀번호 검증 (간단한 버전으로 수정)
-        if (password.length < 8) {
-            return res.status(400).json({
-                status: 400,
-                message: '비밀번호는 최소 8자 이상이어야 합니다.',
-                data: null
-            });
-        }
-
-        // 이메일 중복 검사
-        const checkEmailQuery = 'SELECT user_id FROM SFMARK1.user WHERE email_adress = ?';
-        const [existingUser] = await executeQuery(checkEmailQuery, [email_adress]);
-        
-        if (existingUser) {
-            return res.status(409).json({
-                status: 409,
-                message: '이미 사용 중인 이메일입니다.',
-                data: null
-            });
-        }
-
         const password_hash = await bcrypt.hash(password, 10);
-        
+
         // MySQL INSERT 쿼리
         const query = `
-            INSERT INTO SFMARK1.user (
-                email_adress, 
-                password_hash, 
-                username, 
-                marketing_agree, 
-                created_at,
-                updated_at,
-                role_id
-            ) VALUES (?, ?, ?, ?, NOW(), NOW(), 1)
+            INSERT INTO SFMARK1.user (email_adress, password_hash, username, marketing_agree, created_at)
+            VALUES (?, ?, ?, ?, ?)
         `;
         
-        const result = await executeQuery(query, [
+        db.query(query, [
             email_adress,
             password_hash,
             username,
-            marketing_agree ? 1 : 0
-        ]);
-
-        logger.info('회원가입 성공:', { 
-            user_id: result.insertId,
-            email_adress, 
-            username 
-        });
-
-        return res.status(201).json({
-            status: 201,
-            message: '회원가입이 성공적으로 완료되었습니다.',
-            data: {
-                user_id: result.insertId,
-                email_adress,
-                username
+            marketing_agree ? 1 : 0,  // BIT(1) 필드에 맞게 1 또는 0으로 변환
+            created_at
+        ], (err, result) => {
+            if (err) {
+                console.error("회원가입 중 오류:", err);
+                return res.status(500).send("회원가입 중 오류가 발생했습니다.");
             }
+            res.status(200).send("회원가입이 성공적으로 완료되었습니다.");
         });
-
     } catch (error) {
-        logger.error('회원가입 중 오류:', error);
-        return res.status(500).json({
-            status: 500,
-            message: '서버 오류가 발생했습니다.',
-            data: null,
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
-        });
+        console.error("서버 오류:", error);
+        res.status(500).send("서버 오류가 발생했습니다.");
     }
 });
 
