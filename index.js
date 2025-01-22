@@ -1465,3 +1465,107 @@ app.get('/api/sensor-data/:sensorId', async (req, res) => {
         });
     }
 });
+
+// GET /api/control-stat - 모든 제어 상태 조회
+app.get('/api/control-stat', async (req, res) => {
+    try {
+        const query = `
+            SELECT 
+                id,
+                device,
+                status,
+                created_at,
+                updated_at
+            FROM SFMARK1.control_stat
+            ORDER BY created_at DESC
+        `;
+
+        const results = await executeQuery(query);
+
+        return res.status(200).json({
+            status: 200,
+            message: "제어 상태 조회 성공",
+            data: results
+        });
+
+    } catch (error) {
+        logger.error('제어 상태 조회 중 오류:', error);
+        return res.status(500).json({
+            status: 500,
+            message: "제어 상태 조회 중 오류가 발생했습니다.",
+            data: null
+        });
+    }
+});
+
+// PUT /api/control-stat/:id - 특정 제어 상태 업데이트
+app.put('/api/control-stat/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { device, status } = req.body;
+
+        // 필수 필드 검증
+        if (!device || !status) {
+            return res.status(400).json({
+                status: 400,
+                message: "device와 status는 필수 필드입니다.",
+                data: null
+            });
+        }
+
+        // 해당 ID의 레코드가 존재하는지 확인
+        const checkQuery = `
+            SELECT id FROM SFMARK1.control_stat 
+            WHERE id = ?
+        `;
+        const existing = await executeQuery(checkQuery, [id]);
+
+        if (existing.length === 0) {
+            return res.status(404).json({
+                status: 404,
+                message: "해당 ID의 제어 상태를 찾을 수 없습니다.",
+                data: null
+            });
+        }
+
+        // 업데이트 쿼리 실행
+        const updateQuery = `
+            UPDATE SFMARK1.control_stat 
+            SET 
+                device = ?,
+                status = ?,
+                updated_at = NOW()
+            WHERE id = ?
+        `;
+
+        await executeQuery(updateQuery, [device, status, id]);
+
+        // 업데이트된 데이터 조회
+        const getUpdatedQuery = `
+            SELECT 
+                id,
+                device,
+                status,
+                created_at,
+                updated_at
+            FROM SFMARK1.control_stat
+            WHERE id = ?
+        `;
+
+        const [updatedData] = await executeQuery(getUpdatedQuery, [id]);
+
+        return res.status(200).json({
+            status: 200,
+            message: "제어 상태가 성공적으로 업데이트되었습니다.",
+            data: updatedData
+        });
+
+    } catch (error) {
+        logger.error('제어 상태 업데이트 중 오류:', error);
+        return res.status(500).json({
+            status: 500,
+            message: "제어 상태 업데이트 중 오류가 발생했습니다.",
+            data: null
+        });
+    }
+});
